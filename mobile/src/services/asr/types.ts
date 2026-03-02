@@ -12,6 +12,7 @@ export type RecordingStatus = 'idle' | 'recording' | 'processing' | 'failed';
 export type AsrEvent =
   | { type: 'live'; text: string }
   | { type: 'final'; text: string }
+  | { type: 'status'; message: string; reconnecting: boolean }
   | { type: 'error'; message: string };
 
 export type AsrSession = {

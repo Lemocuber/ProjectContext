@@ -8,14 +8,14 @@ Validate realtime recording reliability and session persistence behavior on Andr
 ## Test Cases
 | ID | Scenario | Expected Result | Status |
 | --- | --- | --- | --- |
-| STB-01 | Start recording with valid key and stable network | Session reaches `Recording`; live text updates continuously | Pending |
-| STB-02 | Stop recording after 10-20s | Status transitions `Finalizing` -> `Idle`; final text appears | Pending |
-| STB-03 | Disable network mid-recording for 5-10s, then restore | Reconnect attempts occur automatically; app does not crash; session either recovers or fails clearly | Pending |
-| STB-04 | Keep network disabled through max retry window | Session fails with explicit error instead of hanging indefinitely | Pending |
-| STB-05 | Leave long silence (>45s) with network alive | Session remains healthy if server heartbeat/messages continue; no immediate crash | Pending |
-| STB-06 | Microphone permission denied | User sees clear error state; no crash | Pending |
-| STB-07 | Kill and reopen app after successful session | Recent session appears in local history | Pending |
-| STB-08 | Trigger session failure, then reopen app | Failed session appears in local history with error context | Pending |
+| STB-01 | Start recording with valid key and stable network | Session reaches `Recording`; live text updates continuously | Pass |
+| STB-02 | Stop recording after 10-20s | Status transitions `Stopping` -> `Idle`; final text appears | Pass |
+| STB-03 | Disable network mid-recording for 5-10s, then restore | Reconnect attempts occur automatically; app does not crash; session either recovers or fails clearly | Fail, new session silently created, previous text wiped |
+| STB-04 | Keep network disabled through max retry window | Session fails with explicit error instead of hanging indefinitely | Pass |
+| STB-05 | Leave long silence (>45s) with network alive | Session remains healthy if server heartbeat/messages continue; no immediate crash | Pass |
+| STB-06 | Microphone permission denied | User sees clear error state; no crash | Pass |
+| STB-07 | Kill and reopen app after successful session | Recent session appears in local history | Pass |
+| STB-08 | Trigger session failure, then reopen app | Failed session appears in local history with error context | Pass |
 
 ## Notes
 - Current reconnect policy: bounded retries with increasing backoff (0.8s, 1.6s, 3.2s).

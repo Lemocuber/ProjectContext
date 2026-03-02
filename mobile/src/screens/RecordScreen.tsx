@@ -16,6 +16,7 @@ export function RecordScreen() {
   const [liveText, setLiveText] = useState('');
   const [finalText, setFinalText] = useState('');
   const [errorText, setErrorText] = useState('');
+  const [infoText, setInfoText] = useState('');
   const [history, setHistory] = useState<SessionHistoryItem[]>([]);
   const sessionRef = useRef<AsrSession | null>(null);
   const liveTextRef = useRef('');
@@ -73,6 +74,7 @@ export function RecordScreen() {
     liveTextRef.current = '';
     setFinalText('');
     setErrorText('');
+    setInfoText('');
     startAtRef.current = new Date().toISOString();
     sessionIdRef.current = buildSessionId();
     persistedRef.current = false;
@@ -88,11 +90,16 @@ export function RecordScreen() {
           if (event.type === 'final') {
             setFinalText(event.text);
             setStatus('idle');
+            setInfoText('');
             void persistSession({ status: 'completed', finalText: event.text });
+          }
+          if (event.type === 'status') {
+            setInfoText(event.message);
           }
           if (event.type === 'error') {
             setErrorText(event.message);
             setStatus('failed');
+            setInfoText('');
             void persistSession({ status: 'failed', errorText: event.message });
           }
         },
@@ -101,6 +108,7 @@ export function RecordScreen() {
       setStatus('failed');
       const message = error instanceof Error ? error.message : 'Failed to start audio session.';
       setErrorText(message);
+      setInfoText('');
       await persistSession({ status: 'failed', errorText: message });
     }
   };
@@ -114,6 +122,7 @@ export function RecordScreen() {
       setStatus('failed');
       const message = error instanceof Error ? error.message : 'Failed to stop audio session.';
       setErrorText(message);
+      setInfoText('');
       await persistSession({ status: 'failed', errorText: message });
     } finally {
       sessionRef.current = null;
@@ -143,6 +152,7 @@ export function RecordScreen() {
       </Pressable>
 
       {errorText ? <Text style={styles.errorText}>{errorText}</Text> : null}
+      {infoText ? <Text style={styles.infoText}>{infoText}</Text> : null}
 
       <ScrollView contentContainerStyle={styles.transcriptWrap} style={styles.transcriptPanel}>
         <Text style={styles.sectionTitle}>Live Draft</Text>
@@ -237,6 +247,11 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: '#9D1A1A',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  infoText: {
+    color: colors.muted,
     fontSize: 13,
     fontWeight: '600',
   },

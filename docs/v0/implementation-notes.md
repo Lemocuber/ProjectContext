@@ -22,6 +22,8 @@
   - session inactivity timeout watchdog.
   - bounded reconnect/backoff recovery on unexpected disconnects.
   - stop/finalize fallback guard.
+  - reconnect visibility in UI status line.
+  - preserve current transcript text during reconnect attempts.
 - Added local session history persistence:
   - bounded recent session list stored in secure local storage.
   - completed and failed session terminal states persisted with timestamps.

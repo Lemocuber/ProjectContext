@@ -142,6 +142,10 @@ export const dashscopeRealtimeSessionService: AsrSessionService = {
       onEvent({ type: 'live', text: joinTranscript(finalizedSentences, partialSentence) });
     };
 
+    const emitStatus = (message: string, reconnectingState: boolean) => {
+      onEvent({ type: 'status', message, reconnecting: reconnectingState });
+    };
+
     const emitFinalOnce = () => {
       if (finalEmitted) return;
       finalEmitted = true;
@@ -269,6 +273,7 @@ export const dashscopeRealtimeSessionService: AsrSessionService = {
         const eventName = payload.header?.event;
 
         if (eventName === 'task-started') {
+          const recovered = reconnectAttempts > 0;
           taskStarted = true;
           reconnecting = false;
           reconnectAttempts = 0;
@@ -292,6 +297,9 @@ export const dashscopeRealtimeSessionService: AsrSessionService = {
           }
 
           scheduleInactivityTimeout();
+          if (recovered) {
+            emitStatus('Connection recovered. Recording resumed.', false);
+          }
           return;
         }
 
@@ -370,6 +378,16 @@ export const dashscopeRealtimeSessionService: AsrSessionService = {
 
       reconnecting = true;
       reconnectAttempts += 1;
+      emitStatus(
+        `Connection interrupted. Reconnecting (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`,
+        true,
+      );
+
+      if (partialSentence) {
+        finalizedSentences.push(partialSentence);
+        partialSentence = '';
+        emitLive();
+      }
 
       clearTransientTimers();
       await stopAudio();
