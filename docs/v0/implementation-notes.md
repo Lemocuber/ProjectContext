@@ -50,4 +50,10 @@
 - No additional v0 tuning changes were required from current device findings.
 
 ### Next (v1)
-- Prepare v1 plan for optional LLM cleanup + summarization on top of realtime final transcript.
+- Plan and implement v1 feature set:
+  - highlight marking + transcript-window mapping,
+  - speaker diarization support,
+  - vocabulary support,
+  - LLM session title + markdown summary generation,
+  - markdown/audio export.
+- See `docs/v1/` for v1 product/spec/delivery docs.

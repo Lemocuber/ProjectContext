@@ -14,3 +14,7 @@
 - Should v0 history keep only recent local sessions or also include delete/export controls?
 - What v1 LLM cleanup/summarization quality bar and cost budget are acceptable per session?
 - Do we need export/share of transcript in v1?
+
+## Status Update (2026-03-02)
+- v1 scope now includes markdown/audio export and LLM-generated session title + markdown summary.
+- Remaining decision: acceptable quality/cost bar and default generation trigger behavior.
