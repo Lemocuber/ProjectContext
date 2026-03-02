@@ -19,6 +19,9 @@
   - Final transcript emission on `task-finished` or stop timeout fallback.
 - Added Android phone trial runbook:
   - `docs/v0/android-phone-test-run.md`
+- Validated real CI delivery path:
+  - Non-`main` branch push auto-triggers Android APK workflow.
+  - Build produces downloadable artifact `project-context-android-apk`.
 
 ### Pending (next)
 - Add dedicated second-pass non-realtime ASR cleanup for stronger final transcript quality.
