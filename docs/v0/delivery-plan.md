@@ -13,7 +13,7 @@
 
 ## Milestone 3: Final Cleaned Transcript
 - Add stop-recording finalize path.
-- Submit finalization request to non-realtime ASR pass.
+- Emit final transcript from realtime task completion path.
 - Persist session transcript output.
 
 ## Acceptance Criteria (V0)
@@ -21,3 +21,11 @@
 - Live transcript updates within practical latency budget.
 - Stopping recording produces a final cleaned transcript.
 - Android build artifact can be generated in GitHub Actions.
+
+## Status Snapshot (2026-03-02)
+- Milestone 1: complete.
+- Milestone 2: complete.
+- Milestone 3: in progress.
+  - Stop/finalize path: done.
+  - Local transcript persistence: done.
+  - Device stability validation + tuning: pending.

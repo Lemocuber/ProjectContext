@@ -14,7 +14,13 @@
   - Service emits partial/final transcript events to UI.
 - Transcript processing:
   - Phase 1: live partial transcript from realtime model (`result-generated` events).
-  - Phase 2: v0 currently composes final text from server sentence-end events and task-finished completion.
+  - Phase 2: v0 composes final text from server sentence-end events and task-finished completion.
+  - No dedicated non-realtime ASR cleanup pass in v0.
+- Stability guardrails:
+  - websocket open timeout + task-start timeout
+  - inactivity timeout during active session
+  - bounded reconnect retry with backoff on transient disconnects
+  - finish fallback timeout on stop path
 
 ## API Key Handling (BYOK)
 - User enters API key in Settings.
@@ -23,9 +29,24 @@
 - Validate key format on save.
 
 ## Session Data Model (Draft)
-- Session: id, startedAt, endedAt, status
-- LiveSegment: sessionId, seq, text, ts
-- FinalTranscript: sessionId, text, metadata
+- SessionHistoryItem:
+  - id
+  - startedAt
+  - endedAt
+  - status (`completed` | `failed`)
+  - liveText
+  - finalText
+  - errorText (optional)
+- Local storage:
+  - Persist bounded recent history list in secure local storage.
+  - Most-recent-first ordering.
+
+## Endpoint
+- Current websocket endpoint: `wss://dashscope.aliyuncs.com/api-ws/v1/inference/` (China mainland/Beijing).
+- International/Singapore endpoint remains configurable future work if cross-region keys are needed.
+
+## V1 Direction
+- Optional LLM cleanup and summarization layer on top of persisted transcript text.
 
 ## Build and CI
 - GitHub Actions for:

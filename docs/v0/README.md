@@ -7,5 +7,7 @@ Initial product and engineering specs for Android prototype.
 - [Technical Specification](./technical-specification.md)
 - [Delivery Plan](./delivery-plan.md)
 - [Risks and Open Questions](./risks-and-open-questions.md)
+- [History and Stability Addendum](./history-and-stability-spec.md)
+- [Stability Test Matrix](./stability-test-matrix.md)
 - [Implementation Notes](./implementation-notes.md)
 - [Android Phone Test Run](./android-phone-test-run.md)

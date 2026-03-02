@@ -17,13 +17,26 @@
   - Realtime WebSocket session to DashScope FunASR.
   - Live transcript updates from `result-generated` events.
   - Final transcript emission on `task-finished` or stop timeout fallback.
+- Hardened realtime session reliability path:
+  - websocket open timeout and task-start timeout.
+  - session inactivity timeout watchdog.
+  - bounded reconnect/backoff recovery on unexpected disconnects.
+  - stop/finalize fallback guard.
+- Added local session history persistence:
+  - bounded recent session list stored in secure local storage.
+  - completed and failed session terminal states persisted with timestamps.
+  - history surfaced in Record screen (`Recent Sessions` section).
 - Added Android phone trial runbook:
   - `docs/v0/android-phone-test-run.md`
+- Added explicit test planning docs:
+  - `docs/v0/history-and-stability-spec.md`
+  - `docs/v0/stability-test-matrix.md`
 - Validated real CI delivery path:
   - Non-`main` branch push auto-triggers Android APK workflow.
   - Build produces downloadable artifact `project-context-android-apk`.
+- Verified local compile health:
+  - `npm run typecheck` passes in `mobile/`.
 
 ### Pending (next)
-- Add dedicated second-pass non-realtime ASR cleanup for stronger final transcript quality.
-- Persist session history and transcript metadata.
-- Stabilize reconnection/backoff and long-session behavior.
+- Execute Android device stability matrix and tune retry/timeout constants from real runs.
+- Prepare v1 plan for optional LLM cleanup + summarization on top of realtime final transcript.

@@ -11,6 +11,6 @@
 - Use Expo prebuild and maintain native Android module in-repo.
 
 ## Open Questions
-- Which final-pass ASR model/version to standardize on for cleanup?
-- How much local session history is needed in v0 (single latest vs list)?
-- Do we need export/share of transcript in v0 or v1?
+- Should v0 history keep only recent local sessions or also include delete/export controls?
+- What v1 LLM cleanup/summarization quality bar and cost budget are acceptable per session?
+- Do we need export/share of transcript in v1?

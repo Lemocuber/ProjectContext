@@ -16,6 +16,7 @@ Ship an Android-first prototype to record conversations and produce:
 ## Out of Scope (V0)
 - Highlight button while recording.
 - Ask AI analysis button.
+- LLM cleanup/summarization pass.
 - Multi-platform support (iOS/web).
 - Team/workspace sync and account system.
 
@@ -32,3 +33,4 @@ Ship an Android-first prototype to record conversations and produce:
 ## Non-Goals
 - Perfect diarization/speaker labeling in v0.
 - Enterprise-grade key governance.
+- Multi-stage transcript post-processing pipeline in v0.

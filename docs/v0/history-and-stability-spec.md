@@ -1,0 +1,42 @@
+# V0 Addendum: History Persistence and Realtime Stability
+
+Date: 2026-03-02
+
+## Scope
+- Persist transcript session history locally on device.
+- Improve realtime ASR reliability with timeouts and reconnect/backoff.
+
+## History Persistence Spec
+- Store recent sessions as a bounded list in local secure storage.
+- Persist on session terminal states:
+  - completed (final transcript emitted),
+  - failed (terminal error after retries/stop error).
+- Persisted fields per session:
+  - `id`
+  - `startedAt` (ISO string)
+  - `endedAt` (ISO string)
+  - `status` (`completed` | `failed`)
+  - `liveText`
+  - `finalText`
+  - `errorText` (optional)
+- Keep most recent first and cap retained entries for v0.
+
+## Realtime Stability Spec
+- Add connection guardrails:
+  - websocket open timeout,
+  - task-start handshake timeout,
+  - result inactivity timeout during active recording.
+- Add bounded reconnect recovery:
+  - retry unexpected disconnect/failure with exponential backoff,
+  - stop retrying after configured max attempts and fail session.
+- Keep current UX contract:
+  - `Live Draft` remains low-latency stream view,
+  - `Final Cleaned` is final realtime output for v0.
+
+## Non-Goals (This Change)
+- No second-pass non-realtime cleanup model in v0.
+- No export/share flow.
+- No cloud sync for history.
+
+## Follow-up (v1)
+- Add optional LLM cleanup and summarization on top of persisted transcript text.

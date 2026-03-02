@@ -45,5 +45,5 @@ This guide runs the app on a physical Android phone using the existing GitHub Ac
   - verify key region matches endpoint (`dashscope.aliyuncs.com` currently configured).
 
 ## Current known limitation
-- Final transcript is currently assembled from realtime stream completion.
-- A dedicated second-pass cleanup model is planned next.
+- Final transcript is assembled from realtime stream completion in v0.
+- LLM cleanup/summarization is planned for v1.

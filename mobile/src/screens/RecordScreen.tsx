@@ -1,8 +1,14 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { dashscopeRealtimeSessionService } from '../services/asr/dashscopeRealtimeSession';
 import type { AsrSession, RecordingStatus } from '../services/asr/types';
 import { loadApiKey } from '../storage/apiKeyStore';
+import {
+  appendSessionHistory,
+  loadSessionHistory,
+  type SessionHistoryItem,
+  type SessionHistoryStatus,
+} from '../storage/sessionHistoryStore';
 import { colors } from '../theme';
 
 export function RecordScreen() {
@@ -10,7 +16,18 @@ export function RecordScreen() {
   const [liveText, setLiveText] = useState('');
   const [finalText, setFinalText] = useState('');
   const [errorText, setErrorText] = useState('');
+  const [history, setHistory] = useState<SessionHistoryItem[]>([]);
   const sessionRef = useRef<AsrSession | null>(null);
+  const liveTextRef = useRef('');
+  const startAtRef = useRef<string | null>(null);
+  const sessionIdRef = useRef('');
+  const persistedRef = useRef(false);
+
+  useEffect(() => {
+    void (async () => {
+      setHistory(await loadSessionHistory());
+    })();
+  }, []);
 
   const statusLabel = useMemo(() => {
     if (status === 'recording') return 'Recording';
@@ -18,6 +35,28 @@ export function RecordScreen() {
     if (status === 'failed') return 'Failed';
     return 'Idle';
   }, [status]);
+
+  const persistSession = async (next: {
+    status: SessionHistoryStatus;
+    finalText?: string;
+    errorText?: string;
+  }) => {
+    if (persistedRef.current) return;
+    if (!startAtRef.current || !sessionIdRef.current) return;
+
+    persistedRef.current = true;
+    const item: SessionHistoryItem = {
+      id: sessionIdRef.current,
+      startedAt: startAtRef.current,
+      endedAt: new Date().toISOString(),
+      status: next.status,
+      liveText: liveTextRef.current,
+      finalText: next.finalText ?? finalText,
+      errorText: next.errorText,
+    };
+
+    setHistory(await appendSessionHistory(item));
+  };
 
   const start = async () => {
     if (status === 'processing') return;
@@ -31,29 +70,38 @@ export function RecordScreen() {
 
     setStatus('recording');
     setLiveText('');
+    liveTextRef.current = '';
     setFinalText('');
     setErrorText('');
+    startAtRef.current = new Date().toISOString();
+    sessionIdRef.current = buildSessionId();
+    persistedRef.current = false;
 
     try {
       sessionRef.current = await dashscopeRealtimeSessionService.start({
         apiKey,
         onEvent: (event) => {
-          if (event.type === 'live') setLiveText(event.text);
+          if (event.type === 'live') {
+            liveTextRef.current = event.text;
+            setLiveText(event.text);
+          }
           if (event.type === 'final') {
             setFinalText(event.text);
             setStatus('idle');
+            void persistSession({ status: 'completed', finalText: event.text });
           }
           if (event.type === 'error') {
             setErrorText(event.message);
             setStatus('failed');
+            void persistSession({ status: 'failed', errorText: event.message });
           }
         },
       });
     } catch (error) {
       setStatus('failed');
-      setErrorText(
-        error instanceof Error ? error.message : 'Failed to start audio session.',
-      );
+      const message = error instanceof Error ? error.message : 'Failed to start audio session.';
+      setErrorText(message);
+      await persistSession({ status: 'failed', errorText: message });
     }
   };
 
@@ -64,9 +112,9 @@ export function RecordScreen() {
       await sessionRef.current.stop();
     } catch (error) {
       setStatus('failed');
-      setErrorText(
-        error instanceof Error ? error.message : 'Failed to stop audio session.',
-      );
+      const message = error instanceof Error ? error.message : 'Failed to stop audio session.';
+      setErrorText(message);
+      await persistSession({ status: 'failed', errorText: message });
     } finally {
       sessionRef.current = null;
     }
@@ -103,13 +151,54 @@ export function RecordScreen() {
         <Text style={[styles.sectionTitle, styles.finalTitle]}>Final Cleaned</Text>
         <Text style={styles.transcriptText}>{finalText || 'Stop recording to generate final transcript.'}</Text>
       </ScrollView>
+
+      <View style={styles.historyPanel}>
+        <Text style={styles.sectionTitle}>Recent Sessions</Text>
+        <ScrollView contentContainerStyle={styles.historyWrap} style={styles.historyList}>
+          {history.length ? (
+            history.map((item) => (
+              <View key={item.id} style={styles.historyItem}>
+                <Text style={styles.historyMeta}>
+                  {formatSessionTime(item.startedAt)} • {item.status}
+                </Text>
+                <Text style={styles.historyText}>
+                  {previewText(item)}
+                </Text>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.emptyText}>No saved sessions yet.</Text>
+          )}
+        </ScrollView>
+      </View>
     </View>
   );
+}
+
+function buildSessionId(): string {
+  const seed = `${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`;
+  return seed.slice(0, 24);
+}
+
+function formatSessionTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return `${date.toLocaleDateString()} ${date.toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+  })}`;
+}
+
+function previewText(item: SessionHistoryItem): string {
+  const text = item.finalText || item.liveText || item.errorText || 'No transcript captured.';
+  return text.length > 160 ? `${text.slice(0, 160)}...` : text;
 }
 
 const styles = StyleSheet.create({
   layout: {
     gap: 14,
+    paddingBottom: 14,
     width: '100%',
   },
   statusPill: {
@@ -156,12 +245,49 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: 14,
     borderWidth: 1,
-    maxHeight: 340,
-    minHeight: 260,
+    maxHeight: 310,
+    minHeight: 230,
     width: '100%',
   },
   transcriptWrap: {
     padding: 14,
+  },
+  historyPanel: {
+    backgroundColor: colors.panel,
+    borderColor: colors.border,
+    borderRadius: 14,
+    borderWidth: 1,
+    minHeight: 160,
+    width: '100%',
+  },
+  historyList: {
+    maxHeight: 220,
+  },
+  historyWrap: {
+    gap: 10,
+    padding: 14,
+    paddingTop: 8,
+  },
+  historyItem: {
+    borderBottomColor: colors.border,
+    borderBottomWidth: 1,
+    paddingBottom: 10,
+  },
+  historyMeta: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'capitalize',
+  },
+  historyText: {
+    color: colors.ink,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 4,
+  },
+  emptyText: {
+    color: colors.muted,
+    fontSize: 14,
   },
   sectionTitle: {
     color: colors.muted,
