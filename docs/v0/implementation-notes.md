@@ -45,6 +45,9 @@
 - Verified local compile health:
   - `npm run typecheck` passes in `mobile/`.
 
-### Pending (next)
-- Re-run focused device checks for audio persistence and in-app playback reliability.
+### V0 Closeout
+- Android phone validation matrix is fully passed, including history playback and scrubber seek checks.
+- No additional v0 tuning changes were required from current device findings.
+
+### Next (v1)
 - Prepare v1 plan for optional LLM cleanup + summarization on top of realtime final transcript.

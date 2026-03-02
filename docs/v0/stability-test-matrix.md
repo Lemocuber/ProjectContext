@@ -16,12 +16,13 @@ Validate realtime recording reliability and session persistence behavior on Andr
 | STB-06 | Microphone permission denied | User sees clear error state; no crash | Pass |
 | STB-07 | Kill and reopen app after successful session | Recent session appears in local history | Pass |
 | STB-08 | Trigger session failure, then reopen app | Failed session appears in local history with error context | Pass |
-| STB-09 | Complete a session and inspect History tab entry | `Audio saved` appears and stored file URI exists | Pending |
-| STB-10 | Open a completed session detail card with saved audio and tap `Play` | Audio plays in-app; `Pause`/`Stop` controls work; no crash | Pending |
-| STB-11 | Drag audio progress scrubber while playback is active | Seek applies correctly; elapsed/total time updates; no crash | Pending |
+| STB-09 | Complete a session and inspect History tab entry | `Audio saved` appears and stored file URI exists | Pass |
+| STB-10 | Open a completed session detail card with saved audio and tap `Play` | Audio plays in-app; `Pause`/`Stop` controls work; no crash | Pass |
+| STB-11 | Drag audio progress scrubber while playback is active | Seek applies correctly; elapsed/total time updates; no crash | Pass |
 
 ## Notes
 - Current reconnect policy: bounded retries with increasing backoff (0.8s, 1.6s, 3.2s).
 - Current guardrails: websocket open timeout, task-start timeout, inactivity timeout, and finish fallback timeout.
+- Latest Android phone run completed all listed cases with `Pass`.
 - v0 final transcript is intentionally realtime-derived.
 - LLM cleanup/summarization is planned for v1.

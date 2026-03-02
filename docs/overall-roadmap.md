@@ -12,10 +12,10 @@ Project Context starts as an Android-first voice capture tool with real-time tra
 - Real-time ASR pipeline with DashScope WebSocket.
 - GitHub Actions Android APK build for non-`main` branches.
 
-### Phase 1: V0 Completion and Validation (In Progress)
+### Phase 1: V0 Completion and Validation (Completed)
 - Persist session history locally (record metadata + transcript + audio artifacts). (Done)
-- Improve reliability for weak networks and long sessions. (Done, pending device validation tuning)
-- Complete Android phone stability matrix and finalize v0 acceptance.
+- Improve reliability for weak networks and long sessions. (Done)
+- Complete Android phone stability matrix and finalize v0 acceptance. (Done)
 
 ### Phase 2: Context Controls (Planned)
 - Add highlight button during recording.

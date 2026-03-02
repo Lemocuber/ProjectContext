@@ -30,8 +30,9 @@
 ## Status Snapshot (2026-03-02)
 - Milestone 1: complete.
 - Milestone 2: complete.
-- Milestone 3: in progress.
+- Milestone 3: complete.
   - Stop/finalize path: done.
   - Local transcript persistence: done.
   - Recorded audio persistence: done.
-  - Device stability validation + tuning: pending.
+  - History detail card + audio player UI: done.
+  - Device stability validation + tuning: done.
