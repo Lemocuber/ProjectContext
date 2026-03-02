@@ -1,6 +1,7 @@
 # Logs
 logs
 *.log
+.DS_Store
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -40,6 +41,8 @@ build/Release
 # Dependency directories
 node_modules/
 jspm_packages/
+mobile/android/
+mobile/ios/
 
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/
@@ -49,6 +52,7 @@ web_modules/
 
 # Optional npm cache directory
 .npm
+.npm-cache/
 
 # Optional eslint cache
 .eslintcache
