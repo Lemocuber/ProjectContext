@@ -31,7 +31,7 @@ export function RecordScreen() {
 
   const statusLabel = useMemo(() => {
     if (status === 'recording') return 'Recording';
-    if (status === 'processing') return 'Finalizing';
+    if (status === 'processing') return 'Stopping';
     if (status === 'failed') return 'Failed';
     return 'Idle';
   }, [status]);
@@ -148,8 +148,8 @@ export function RecordScreen() {
         <Text style={styles.sectionTitle}>Live Draft</Text>
         <Text style={styles.transcriptText}>{liveText || 'Waiting for live transcript...'}</Text>
 
-        <Text style={[styles.sectionTitle, styles.finalTitle]}>Final Cleaned</Text>
-        <Text style={styles.transcriptText}>{finalText || 'Stop recording to generate final transcript.'}</Text>
+        <Text style={[styles.sectionTitle, styles.finalTitle]}>Final Transcript</Text>
+        <Text style={styles.transcriptText}>{finalText || 'Stop recording to finalize transcript.'}</Text>
       </ScrollView>
 
       <View style={styles.historyPanel}>

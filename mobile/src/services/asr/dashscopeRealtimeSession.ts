@@ -9,6 +9,8 @@ const OPEN_TIMEOUT_MS = 8000;
 const TASK_START_TIMEOUT_MS = 10000;
 const INACTIVITY_TIMEOUT_MS = 45000;
 const FINISH_FALLBACK_MS = 6000;
+const AUDIO_STOP_TIMEOUT_MS = 1500;
+const STOP_HARD_TIMEOUT_MS = 12000;
 const RECONNECT_DELAYS_MS = [800, 1600, 3200];
 const MAX_RECONNECT_ATTEMPTS = RECONNECT_DELAYS_MS.length;
 
@@ -100,6 +102,7 @@ export const dashscopeRealtimeSessionService: AsrSessionService = {
     let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
     let finishTimer: ReturnType<typeof setTimeout> | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let stopHardTimer: ReturnType<typeof setTimeout> | null = null;
 
     let resolveDone: (() => void) | null = null;
     const donePromise = new Promise<void>((resolve) => {
@@ -123,8 +126,10 @@ export const dashscopeRealtimeSessionService: AsrSessionService = {
       clearTransientTimers();
       clearTimer(finishTimer);
       clearTimer(reconnectTimer);
+      clearTimer(stopHardTimer);
       finishTimer = null;
       reconnectTimer = null;
+      stopHardTimer = null;
     };
 
     const resolveOnce = () => {
@@ -160,7 +165,12 @@ export const dashscopeRealtimeSessionService: AsrSessionService = {
       }
 
       try {
-        await LiveAudioStream.stop();
+        await Promise.race([
+          LiveAudioStream.stop(),
+          new Promise<void>((resolve) => {
+            setTimeout(resolve, AUDIO_STOP_TIMEOUT_MS);
+          }),
+        ]);
       } catch {
         // Ignore when stream has not started yet.
       }
@@ -414,6 +424,13 @@ export const dashscopeRealtimeSessionService: AsrSessionService = {
         hasStopped = true;
         clearTimer(reconnectTimer);
         reconnectTimer = null;
+        reconnecting = false;
+
+        stopHardTimer = setTimeout(() => {
+          if (!resolved) void completeSession(true);
+        }, STOP_HARD_TIMEOUT_MS);
+
+        await stopAudio();
 
         if (ws && ws.readyState === WebSocket.OPEN && taskStarted) {
           sendFinishTask();
@@ -422,6 +439,8 @@ export const dashscopeRealtimeSessionService: AsrSessionService = {
         }
 
         await donePromise;
+        clearTimer(stopHardTimer);
+        stopHardTimer = null;
       },
     };
   },
