@@ -8,12 +8,12 @@ Project Context starts as an Android-first voice capture tool with real-time tra
 ### Phase 0: Prototype Foundation (Completed)
 - Android app scaffold with React Native + Expo prebuild.
 - BYOK (manual DashScope API key input and secure storage).
-- Large record button and transcript UI (`Live Draft` + `Final Cleaned`).
+- Large record button and single transcript UI.
 - Real-time ASR pipeline with DashScope WebSocket.
 - GitHub Actions Android APK build for non-`main` branches.
 
 ### Phase 1: V0 Completion and Validation (In Progress)
-- Persist session history locally (record metadata + transcript artifacts). (Done)
+- Persist session history locally (record metadata + transcript + audio artifacts). (Done)
 - Improve reliability for weak networks and long sessions. (Done, pending device validation tuning)
 - Complete Android phone stability matrix and finalize v0 acceptance.
 

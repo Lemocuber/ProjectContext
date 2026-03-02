@@ -11,9 +11,9 @@ export type RecordingStatus = 'idle' | 'recording' | 'processing' | 'failed';
 
 export type AsrEvent =
   | { type: 'live'; text: string }
-  | { type: 'final'; text: string }
+  | { type: 'final'; text: string; audioFileUri: string | null }
   | { type: 'status'; message: string; reconnecting: boolean }
-  | { type: 'error'; message: string };
+  | { type: 'error'; message: string; audioFileUri: string | null };
 
 export type AsrSession = {
   stop: () => Promise<void>;

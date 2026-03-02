@@ -6,7 +6,7 @@
 - Created Expo Android-first mobile app scaffold in `mobile/`.
 - Added foundational app UI:
   - Record screen with large Start/Stop control.
-  - Transcript sections for `Live Draft` and `Final Cleaned`.
+  - Single transcript section (no live/final split).
   - Settings screen for BYOK DashScope API key input.
 - Added secure key storage wrapper (`expo-secure-store`).
 - Added GitHub Actions workflows for:
@@ -27,7 +27,11 @@
 - Added local session history persistence:
   - bounded recent session list stored in secure local storage.
   - completed and failed session terminal states persisted with timestamps.
+  - transcript and optional `audioFileUri` persisted per session.
   - history surfaced in Record screen (`Recent Sessions` section).
+- Added local audio persistence:
+  - PCM stream chunks are converted to WAV and saved in app document storage.
+  - saved audio file URI is attached to session terminal events/history.
 - Added Android phone trial runbook:
   - `docs/v0/android-phone-test-run.md`
 - Added explicit test planning docs:
@@ -40,5 +44,5 @@
   - `npm run typecheck` passes in `mobile/`.
 
 ### Pending (next)
-- Execute Android device stability matrix and tune retry/timeout constants from real runs.
+- Re-run focused device checks for audio persistence (file exists and is replayable).
 - Prepare v1 plan for optional LLM cleanup + summarization on top of realtime final transcript.

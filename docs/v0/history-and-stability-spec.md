@@ -3,7 +3,7 @@
 Date: 2026-03-02
 
 ## Scope
-- Persist transcript session history locally on device.
+- Persist transcript + audio session history locally on device.
 - Improve realtime ASR reliability with timeouts and reconnect/backoff.
 
 ## History Persistence Spec
@@ -16,8 +16,8 @@ Date: 2026-03-02
   - `startedAt` (ISO string)
   - `endedAt` (ISO string)
   - `status` (`completed` | `failed`)
-  - `liveText`
-  - `finalText`
+  - `transcript`
+  - `audioFileUri` (optional)
   - `errorText` (optional)
 - Keep most recent first and cap retained entries for v0.
 
@@ -30,8 +30,8 @@ Date: 2026-03-02
   - retry unexpected disconnect/failure with exponential backoff,
   - stop retrying after configured max attempts and fail session.
 - Keep current UX contract:
-  - `Live Draft` remains low-latency stream view,
-  - `Final Cleaned` is final realtime output for v0.
+  - single transcript view (no live/final section split),
+  - transcript remains after stop completion.
 
 ## Non-Goals (This Change)
 - No second-pass non-realtime cleanup model in v0.

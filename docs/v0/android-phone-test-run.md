@@ -32,9 +32,10 @@ This guide runs the app on a physical Android phone using the existing GitHub Ac
 
 ## Expected behavior
 - `Status` changes to `Recording` while speaking.
-- `Live Draft` text updates in near real time.
-- After stop, status changes to `Finalizing`, then returns to `Idle`.
-- `Final Cleaned` text appears.
+- `Transcript` text updates in near real time.
+- After stop, status changes to `Stopping`, then returns to `Idle`.
+- The transcript remains visible.
+- Session is listed in `Recent Sessions` with `Audio saved`.
 
 ## Quick troubleshooting
 - `Set your API key...`: save key in Settings first.

@@ -13,13 +13,12 @@ import { colors } from '../theme';
 
 export function RecordScreen() {
   const [status, setStatus] = useState<RecordingStatus>('idle');
-  const [liveText, setLiveText] = useState('');
-  const [finalText, setFinalText] = useState('');
+  const [transcriptText, setTranscriptText] = useState('');
   const [errorText, setErrorText] = useState('');
   const [infoText, setInfoText] = useState('');
   const [history, setHistory] = useState<SessionHistoryItem[]>([]);
   const sessionRef = useRef<AsrSession | null>(null);
-  const liveTextRef = useRef('');
+  const transcriptRef = useRef('');
   const startAtRef = useRef<string | null>(null);
   const sessionIdRef = useRef('');
   const persistedRef = useRef(false);
@@ -39,8 +38,9 @@ export function RecordScreen() {
 
   const persistSession = async (next: {
     status: SessionHistoryStatus;
-    finalText?: string;
+    transcript?: string;
     errorText?: string;
+    audioFileUri?: string | null;
   }) => {
     if (persistedRef.current) return;
     if (!startAtRef.current || !sessionIdRef.current) return;
@@ -51,9 +51,9 @@ export function RecordScreen() {
       startedAt: startAtRef.current,
       endedAt: new Date().toISOString(),
       status: next.status,
-      liveText: liveTextRef.current,
-      finalText: next.finalText ?? finalText,
+      transcript: next.transcript ?? transcriptRef.current,
       errorText: next.errorText,
+      audioFileUri: next.audioFileUri ?? undefined,
     };
 
     setHistory(await appendSessionHistory(item));
@@ -70,9 +70,8 @@ export function RecordScreen() {
     }
 
     setStatus('recording');
-    setLiveText('');
-    liveTextRef.current = '';
-    setFinalText('');
+    setTranscriptText('');
+    transcriptRef.current = '';
     setErrorText('');
     setInfoText('');
     startAtRef.current = new Date().toISOString();
@@ -84,14 +83,19 @@ export function RecordScreen() {
         apiKey,
         onEvent: (event) => {
           if (event.type === 'live') {
-            liveTextRef.current = event.text;
-            setLiveText(event.text);
+            transcriptRef.current = event.text;
+            setTranscriptText(event.text);
           }
           if (event.type === 'final') {
-            setFinalText(event.text);
+            transcriptRef.current = event.text;
+            setTranscriptText(event.text);
             setStatus('idle');
             setInfoText('');
-            void persistSession({ status: 'completed', finalText: event.text });
+            void persistSession({
+              status: 'completed',
+              transcript: event.text,
+              audioFileUri: event.audioFileUri,
+            });
           }
           if (event.type === 'status') {
             setInfoText(event.message);
@@ -100,7 +104,11 @@ export function RecordScreen() {
             setErrorText(event.message);
             setStatus('failed');
             setInfoText('');
-            void persistSession({ status: 'failed', errorText: event.message });
+            void persistSession({
+              status: 'failed',
+              errorText: event.message,
+              audioFileUri: event.audioFileUri,
+            });
           }
         },
       });
@@ -155,11 +163,8 @@ export function RecordScreen() {
       {infoText ? <Text style={styles.infoText}>{infoText}</Text> : null}
 
       <ScrollView contentContainerStyle={styles.transcriptWrap} style={styles.transcriptPanel}>
-        <Text style={styles.sectionTitle}>Live Draft</Text>
-        <Text style={styles.transcriptText}>{liveText || 'Waiting for live transcript...'}</Text>
-
-        <Text style={[styles.sectionTitle, styles.finalTitle]}>Final Transcript</Text>
-        <Text style={styles.transcriptText}>{finalText || 'Stop recording to finalize transcript.'}</Text>
+        <Text style={styles.sectionTitle}>Transcript</Text>
+        <Text style={styles.transcriptText}>{transcriptText || 'Start recording to capture transcript.'}</Text>
       </ScrollView>
 
       <View style={styles.historyPanel}>
@@ -174,6 +179,7 @@ export function RecordScreen() {
                 <Text style={styles.historyText}>
                   {previewText(item)}
                 </Text>
+                {item.audioFileUri ? <Text style={styles.historyBadge}>Audio saved</Text> : null}
               </View>
             ))
           ) : (
@@ -201,7 +207,7 @@ function formatSessionTime(value: string): string {
 }
 
 function previewText(item: SessionHistoryItem): string {
-  const text = item.finalText || item.liveText || item.errorText || 'No transcript captured.';
+  const text = item.transcript || item.errorText || 'No transcript captured.';
   return text.length > 160 ? `${text.slice(0, 160)}...` : text;
 }
 
@@ -300,6 +306,13 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginTop: 4,
   },
+  historyBadge: {
+    color: colors.good,
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 4,
+    textTransform: 'uppercase',
+  },
   emptyText: {
     color: colors.muted,
     fontSize: 14,
@@ -310,9 +323,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.4,
     textTransform: 'uppercase',
-  },
-  finalTitle: {
-    marginTop: 16,
   },
   transcriptText: {
     color: colors.ink,

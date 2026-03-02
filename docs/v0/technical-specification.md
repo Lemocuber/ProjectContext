@@ -11,10 +11,12 @@
 - Native-backed audio stream layer:
   - `react-native-live-audio-stream` captures low-latency PCM chunks.
   - JS service streams PCM frames to DashScope WebSocket.
-  - Service emits partial/final transcript events to UI.
+  - Service persists PCM as per-session WAV file.
+  - Service emits transcript/status events to UI.
 - Transcript processing:
-  - Phase 1: live partial transcript from realtime model (`result-generated` events).
-  - Phase 2: v0 composes final text from server sentence-end events and task-finished completion.
+  - Single transcript stream in UI.
+  - Realtime text updates from `result-generated` events.
+  - Transcript remains on screen after stop completion.
   - No dedicated non-realtime ASR cleanup pass in v0.
 - Stability guardrails:
   - websocket open timeout + task-start timeout
@@ -34,8 +36,8 @@
   - startedAt
   - endedAt
   - status (`completed` | `failed`)
-  - liveText
-  - finalText
+  - transcript
+  - audioFileUri (optional)
   - errorText (optional)
 - Local storage:
   - Persist bounded recent history list in secure local storage.

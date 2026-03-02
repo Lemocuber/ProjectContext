@@ -10,9 +10,9 @@ export type SessionHistoryItem = {
   startedAt: string;
   endedAt: string;
   status: SessionHistoryStatus;
-  liveText: string;
-  finalText: string;
+  transcript: string;
   errorText?: string;
+  audioFileUri?: string;
 };
 
 function isSessionStatus(value: unknown): value is SessionHistoryStatus {
@@ -27,10 +27,39 @@ function isSessionHistoryItem(value: unknown): value is SessionHistoryItem {
   if (typeof item.startedAt !== 'string') return false;
   if (typeof item.endedAt !== 'string') return false;
   if (!isSessionStatus(item.status)) return false;
-  if (typeof item.liveText !== 'string') return false;
-  if (typeof item.finalText !== 'string') return false;
+  if (typeof item.transcript !== 'string') return false;
   if (typeof item.errorText !== 'undefined' && typeof item.errorText !== 'string') return false;
+  if (typeof item.audioFileUri !== 'undefined' && typeof item.audioFileUri !== 'string') return false;
   return true;
+}
+
+function normalizeLegacySessionHistoryItem(value: unknown): SessionHistoryItem | null {
+  if (isSessionHistoryItem(value)) return value;
+  if (!value || typeof value !== 'object') return null;
+
+  const item = value as Record<string, unknown>;
+  if (typeof item.id !== 'string') return null;
+  if (typeof item.startedAt !== 'string') return null;
+  if (typeof item.endedAt !== 'string') return null;
+  if (!isSessionStatus(item.status)) return null;
+  if (typeof item.liveText !== 'string' && typeof item.finalText !== 'string') return null;
+
+  const transcriptSource =
+    typeof item.finalText === 'string' && item.finalText.trim().length
+      ? item.finalText
+      : typeof item.liveText === 'string'
+        ? item.liveText
+        : '';
+
+  return {
+    id: item.id,
+    startedAt: item.startedAt,
+    endedAt: item.endedAt,
+    status: item.status,
+    transcript: transcriptSource,
+    errorText: typeof item.errorText === 'string' ? item.errorText : undefined,
+    audioFileUri: typeof item.audioFileUri === 'string' ? item.audioFileUri : undefined,
+  };
 }
 
 export async function loadSessionHistory(): Promise<SessionHistoryItem[]> {
@@ -40,7 +69,9 @@ export async function loadSessionHistory(): Promise<SessionHistoryItem[]> {
   try {
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isSessionHistoryItem);
+    return parsed
+      .map((entry) => normalizeLegacySessionHistoryItem(entry))
+      .filter((entry): entry is SessionHistoryItem => !!entry);
   } catch {
     return [];
   }

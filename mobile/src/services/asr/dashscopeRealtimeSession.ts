@@ -1,4 +1,5 @@
 import { Buffer } from 'buffer';
+import { Directory, File, Paths } from 'expo-file-system';
 import LiveAudioStream from 'react-native-live-audio-stream';
 import { PermissionsAndroid, Platform } from 'react-native';
 import type { AsrSession, AsrSessionService } from './types';
@@ -13,6 +14,7 @@ const AUDIO_STOP_TIMEOUT_MS = 1500;
 const STOP_HARD_TIMEOUT_MS = 12000;
 const RECONNECT_DELAYS_MS = [800, 1600, 3200];
 const MAX_RECONNECT_ATTEMPTS = RECONNECT_DELAYS_MS.length;
+const RECORDINGS_DIR_NAME = 'recordings';
 
 const AUDIO_OPTIONS = {
   sampleRate: 16000,
@@ -64,6 +66,51 @@ function parseSocketPayload(raw: unknown): SocketEventPayload | null {
   }
 }
 
+function buildWavHeader(dataSize: number): Buffer {
+  const channels = AUDIO_OPTIONS.channels;
+  const sampleRate = AUDIO_OPTIONS.sampleRate;
+  const bitsPerSample = AUDIO_OPTIONS.bitsPerSample;
+  const byteRate = sampleRate * channels * (bitsPerSample / 8);
+  const blockAlign = channels * (bitsPerSample / 8);
+  const header = Buffer.alloc(44);
+
+  header.write('RIFF', 0, 'ascii');
+  header.writeUInt32LE(36 + dataSize, 4);
+  header.write('WAVE', 8, 'ascii');
+  header.write('fmt ', 12, 'ascii');
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(channels, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(byteRate, 28);
+  header.writeUInt16LE(blockAlign, 32);
+  header.writeUInt16LE(bitsPerSample, 34);
+  header.write('data', 36, 'ascii');
+  header.writeUInt32LE(dataSize, 40);
+
+  return header;
+}
+
+function saveRecordingWav(taskId: string, chunks: Buffer[], totalBytes: number): string | null {
+  if (!chunks.length || totalBytes <= 0) return null;
+
+  try {
+    const recordingsDir = new Directory(Paths.document, RECORDINGS_DIR_NAME);
+    if (!recordingsDir.exists) {
+      recordingsDir.create({ intermediates: true, idempotent: true });
+    }
+
+    const outputFile = new File(recordingsDir, `${taskId}.wav`);
+    outputFile.create({ intermediates: true, overwrite: true });
+
+    const wavData = Buffer.concat([buildWavHeader(totalBytes), ...chunks]);
+    outputFile.write(wavData.toString('base64'), { encoding: 'base64' });
+    return outputFile.uri;
+  } catch {
+    return null;
+  }
+}
+
 async function requestMicPermission(): Promise<void> {
   if (Platform.OS !== 'android') {
     throw new Error('Realtime recording is enabled for Android prototype only.');
@@ -84,6 +131,10 @@ export const dashscopeRealtimeSessionService: AsrSessionService = {
 
     const finalizedSentences: string[] = [];
     let partialSentence = '';
+    const recordingId = buildTaskId();
+    const audioChunks: Buffer[] = [];
+    let audioBytes = 0;
+    let audioFileUri: string | null = null;
 
     let ws: WebSocket | null = null;
     let currentTaskId = '';
@@ -146,10 +197,20 @@ export const dashscopeRealtimeSessionService: AsrSessionService = {
       onEvent({ type: 'status', message, reconnecting: reconnectingState });
     };
 
+    const persistAudioOnce = () => {
+      if (audioFileUri !== null) return audioFileUri;
+      audioFileUri = saveRecordingWav(recordingId, audioChunks, audioBytes);
+      return audioFileUri;
+    };
+
     const emitFinalOnce = () => {
       if (finalEmitted) return;
       finalEmitted = true;
-      onEvent({ type: 'final', text: joinTranscript(finalizedSentences, partialSentence) });
+      onEvent({
+        type: 'final',
+        text: joinTranscript(finalizedSentences, partialSentence),
+        audioFileUri: persistAudioOnce(),
+      });
     };
 
     const closeSocket = () => {
@@ -207,7 +268,7 @@ export const dashscopeRealtimeSessionService: AsrSessionService = {
       reconnecting = false;
       await stopAudio();
       closeSocket();
-      onEvent({ type: 'error', message });
+      onEvent({ type: 'error', message, audioFileUri: persistAudioOnce() });
       resolveOnce();
     };
 
@@ -287,8 +348,17 @@ export const dashscopeRealtimeSessionService: AsrSessionService = {
               if (resolved || finishSent || !taskStarted || ws !== socket) return;
               if (socket.readyState !== WebSocket.OPEN) return;
 
-              const pcm = Uint8Array.from(Buffer.from(base64Chunk, 'base64'));
-              socket.send(pcm.buffer);
+              const pcm = Buffer.from(base64Chunk, 'base64');
+              if (!pcm.length) return;
+
+              audioChunks.push(pcm);
+              audioBytes += pcm.length;
+
+              const payload = pcm.buffer.slice(
+                pcm.byteOffset,
+                pcm.byteOffset + pcm.byteLength,
+              ) as ArrayBuffer;
+              socket.send(payload);
             }) as unknown as { remove: () => void });
             LiveAudioStream.start();
           } catch {

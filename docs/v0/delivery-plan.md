@@ -11,15 +11,17 @@
 - Connect to DashScope realtime WebSocket.
 - Render low-latency live transcript updates.
 
-## Milestone 3: Final Cleaned Transcript
+## Milestone 3: Persisted Session Output
 - Add stop-recording finalize path.
-- Emit final transcript from realtime task completion path.
+- Emit single transcript output from realtime task completion path.
 - Persist session transcript output.
+- Persist recorded audio file with session metadata.
 
 ## Acceptance Criteria (V0)
 - User can save API key and start recording.
 - Live transcript updates within practical latency budget.
-- Stopping recording produces a final cleaned transcript.
+- Stopping recording preserves transcript in session history.
+- Session history entry includes saved local audio file reference.
 - Android build artifact can be generated in GitHub Actions.
 
 ## Status Snapshot (2026-03-02)
@@ -28,4 +30,5 @@
 - Milestone 3: in progress.
   - Stop/finalize path: done.
   - Local transcript persistence: done.
+  - Recorded audio persistence: done.
   - Device stability validation + tuning: pending.
