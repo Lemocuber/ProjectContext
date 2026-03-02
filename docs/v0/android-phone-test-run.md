@@ -20,7 +20,8 @@ This guide runs the app on a physical Android phone using the existing GitHub Ac
 10. Open `Project Context` app.
 11. Go to `Settings`, paste your DashScope API key, and tap `Save`.
 12. Go to `Record`, tap `Start Recording`, speak for 10-20 seconds, then tap `Stop`.
-13. Open `History`, expand the new session entry, and test `Play audio`.
+13. Open `History`, tap the new session entry to open the detail card.
+14. In the detail card, test `Play`, `Pause`, `Stop`, and scrubber seek.
 
 ## Workflow trigger details
 - Auto-trigger is enabled for `push` to all branches except `main`.
@@ -38,7 +39,8 @@ This guide runs the app on a physical Android phone using the existing GitHub Ac
 - After stop, status changes to `Stopping`, then returns to `Idle`.
 - The transcript remains visible.
 - Session appears in `History` with `Audio saved`.
-- Expanded session shows full transcript and in-app playback controls.
+- Session detail card shows full transcript and in-app audio player.
+- Audio player progress is draggable and displays elapsed/total time.
 
 ## Quick troubleshooting
 - `Set your API key...`: save key in Settings first.

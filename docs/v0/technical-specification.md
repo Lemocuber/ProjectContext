@@ -10,7 +10,7 @@
 ## Architecture
 - JS/UI layer:
   - Record tab (start/stop + live transcript)
-  - History tab (persisted sessions list + inline expansion)
+  - History tab (persisted sessions list + modal detail card)
   - Settings tab (BYOK key input)
 - Native-backed audio stream layer:
   - `react-native-live-audio-stream` captures low-latency PCM chunks.
@@ -18,8 +18,9 @@
   - Service persists PCM as per-session WAV file.
   - Service emits transcript/status events to UI.
 - Playback layer:
-  - History expansion uses stored `audioFileUri`.
-  - `expo-av` loads, plays, pauses, and stops local WAV files.
+  - History detail card uses stored `audioFileUri`.
+  - `expo-av` loads, plays, pauses, seeks, and stops local WAV files.
+  - Slider-based scrubber allows draggable progress with elapsed/total time labels.
 - Transcript processing:
   - Single transcript stream in UI.
   - Realtime text updates from `result-generated` events.

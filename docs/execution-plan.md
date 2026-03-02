@@ -32,4 +32,4 @@
   - transcript updates while speaking
   - stop recording
   - session appears in History tab with audio-saved marker
-  - expanded session can play saved audio in-app
+  - history detail card can play and seek saved audio in-app

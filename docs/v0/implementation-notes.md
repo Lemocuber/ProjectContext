@@ -29,11 +29,11 @@
   - completed and failed session terminal states persisted with timestamps.
   - transcript and optional `audioFileUri` persisted per session.
   - history moved to dedicated `History` tab.
-  - each history row expands inline to show full transcript details.
+  - tapping a history row opens a popup detail card for full transcript details.
 - Added local audio persistence:
   - PCM stream chunks are converted to WAV and saved in app document storage.
   - saved audio file URI is attached to session terminal events/history.
-  - added in-app playback controls (play/pause/stop) for expanded history items.
+  - added in-app player (play/pause/stop + draggable progress + time labels) in detail card.
 - Added Android phone trial runbook:
   - `docs/v0/android-phone-test-run.md`
 - Added explicit test planning docs:
