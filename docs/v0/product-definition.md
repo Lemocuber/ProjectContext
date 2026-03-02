@@ -10,7 +10,9 @@ Ship an Android-first prototype to record conversations and produce:
 - BYOK flow: user manually enters DashScope API key in app.
 - Recording screen with a large Start/Stop button.
 - Single transcript area that updates during recording and remains after stop.
-- Local persistence for transcript artifacts and recorded audio (minimum viable session history).
+- Separate History tab with recent sessions list (most recent first).
+- Per-session expandable details in History to view full transcript and playback saved audio.
+- Local persistence for transcript artifacts and recorded audio.
 
 ## Out of Scope (V0)
 - Highlight button while recording.
@@ -22,6 +24,8 @@ Ship an Android-first prototype to record conversations and produce:
 ## UX Requirements
 - Primary action must be obvious and thumb-friendly.
 - Show one transcript surface (no live/final split in v0).
+- Keep Record tab focused on active capture UX (record control + current transcript).
+- History tab must show session timestamp/status, preview text, and expandable full details.
 - Error states:
   - Missing/invalid API key
   - Network interruption

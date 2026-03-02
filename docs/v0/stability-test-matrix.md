@@ -16,7 +16,8 @@ Validate realtime recording reliability and session persistence behavior on Andr
 | STB-06 | Microphone permission denied | User sees clear error state; no crash | Pass |
 | STB-07 | Kill and reopen app after successful session | Recent session appears in local history | Pass |
 | STB-08 | Trigger session failure, then reopen app | Failed session appears in local history with error context | Pass |
-| STB-09 | Complete a session and inspect history entry | `Audio saved` appears and stored file URI exists | Pending |
+| STB-09 | Complete a session and inspect History tab entry | `Audio saved` appears and stored file URI exists | Pending |
+| STB-10 | Expand a completed session with saved audio and tap `Play audio` | Audio plays in-app; `Pause`/`Stop` controls work; no crash | Pending |
 
 ## Notes
 - Current reconnect policy: bounded retries with increasing backoff (0.8s, 1.6s, 3.2s).

@@ -1,19 +1,26 @@
 import { StatusBar } from 'expo-status-bar';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { HistoryScreen } from './src/screens/HistoryScreen';
 import { RecordScreen } from './src/screens/RecordScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { colors } from './src/theme';
 
-type Tab = 'record' | 'settings';
+type Tab = 'record' | 'history' | 'settings';
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('record');
+  const [historyRefreshToken, setHistoryRefreshToken] = useState(0);
+
+  const handleHistoryUpdated = useCallback(() => {
+    setHistoryRefreshToken((value) => value + 1);
+  }, []);
 
   const body = useMemo(() => {
     if (tab === 'settings') return <SettingsScreen />;
-    return <RecordScreen />;
-  }, [tab]);
+    if (tab === 'history') return <HistoryScreen refreshToken={historyRefreshToken} />;
+    return <RecordScreen onHistoryUpdated={handleHistoryUpdated} />;
+  }, [handleHistoryUpdated, historyRefreshToken, tab]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -28,6 +35,12 @@ export default function App() {
             style={[styles.tabButton, tab === 'record' ? styles.tabButtonActive : null]}
           >
             <Text style={[styles.tabLabel, tab === 'record' ? styles.tabLabelActive : null]}>Record</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setTab('history')}
+            style={[styles.tabButton, tab === 'history' ? styles.tabButtonActive : null]}
+          >
+            <Text style={[styles.tabLabel, tab === 'history' ? styles.tabLabelActive : null]}>History</Text>
           </Pressable>
           <Pressable
             onPress={() => setTab('settings')}

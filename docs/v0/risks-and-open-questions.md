@@ -12,6 +12,5 @@
 
 ## Open Questions
 - Should v0 history keep only recent local sessions or also include delete/export controls?
-- Should v0 expose in-app playback controls for saved audio, or keep file-path persistence only?
 - What v1 LLM cleanup/summarization quality bar and cost budget are acceptable per session?
 - Do we need export/share of transcript in v1?

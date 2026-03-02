@@ -31,4 +31,5 @@
   - start recording
   - transcript updates while speaking
   - stop recording
-  - transcript persists in history with audio saved marker
+  - session appears in History tab with audio-saved marker
+  - expanded session can play saved audio in-app

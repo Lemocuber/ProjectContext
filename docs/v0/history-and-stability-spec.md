@@ -20,6 +20,13 @@ Date: 2026-03-02
   - `audioFileUri` (optional)
   - `errorText` (optional)
 - Keep most recent first and cap retained entries for v0.
+- History UI contract:
+  - separate `History` tab (not embedded in `Record` tab),
+  - collapsed row shows timestamp, status, preview text, and audio-saved marker when available,
+  - tapping a row expands inline details with full transcript and playback controls.
+- Playback contract:
+  - if `audioFileUri` exists, user can play/pause/stop on expanded row,
+  - playback errors surface as inline row-level error text.
 
 ## Realtime Stability Spec
 - Add connection guardrails:

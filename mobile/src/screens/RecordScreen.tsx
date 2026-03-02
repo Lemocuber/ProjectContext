@@ -1,33 +1,29 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { dashscopeRealtimeSessionService } from '../services/asr/dashscopeRealtimeSession';
 import type { AsrSession, RecordingStatus } from '../services/asr/types';
 import { loadApiKey } from '../storage/apiKeyStore';
 import {
   appendSessionHistory,
-  loadSessionHistory,
   type SessionHistoryItem,
   type SessionHistoryStatus,
 } from '../storage/sessionHistoryStore';
 import { colors } from '../theme';
 
-export function RecordScreen() {
+type RecordScreenProps = {
+  onHistoryUpdated?: () => void;
+};
+
+export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
   const [status, setStatus] = useState<RecordingStatus>('idle');
   const [transcriptText, setTranscriptText] = useState('');
   const [errorText, setErrorText] = useState('');
   const [infoText, setInfoText] = useState('');
-  const [history, setHistory] = useState<SessionHistoryItem[]>([]);
   const sessionRef = useRef<AsrSession | null>(null);
   const transcriptRef = useRef('');
   const startAtRef = useRef<string | null>(null);
   const sessionIdRef = useRef('');
   const persistedRef = useRef(false);
-
-  useEffect(() => {
-    void (async () => {
-      setHistory(await loadSessionHistory());
-    })();
-  }, []);
 
   const statusLabel = useMemo(() => {
     if (status === 'recording') return 'Recording';
@@ -56,7 +52,8 @@ export function RecordScreen() {
       audioFileUri: next.audioFileUri ?? undefined,
     };
 
-    setHistory(await appendSessionHistory(item));
+    await appendSessionHistory(item);
+    onHistoryUpdated?.();
   };
 
   const start = async () => {
@@ -166,27 +163,6 @@ export function RecordScreen() {
         <Text style={styles.sectionTitle}>Transcript</Text>
         <Text style={styles.transcriptText}>{transcriptText || 'Start recording to capture transcript.'}</Text>
       </ScrollView>
-
-      <View style={styles.historyPanel}>
-        <Text style={styles.sectionTitle}>Recent Sessions</Text>
-        <ScrollView contentContainerStyle={styles.historyWrap} style={styles.historyList}>
-          {history.length ? (
-            history.map((item) => (
-              <View key={item.id} style={styles.historyItem}>
-                <Text style={styles.historyMeta}>
-                  {formatSessionTime(item.startedAt)} • {item.status}
-                </Text>
-                <Text style={styles.historyText}>
-                  {previewText(item)}
-                </Text>
-                {item.audioFileUri ? <Text style={styles.historyBadge}>Audio saved</Text> : null}
-              </View>
-            ))
-          ) : (
-            <Text style={styles.emptyText}>No saved sessions yet.</Text>
-          )}
-        </ScrollView>
-      </View>
     </View>
   );
 }
@@ -196,23 +172,9 @@ function buildSessionId(): string {
   return seed.slice(0, 24);
 }
 
-function formatSessionTime(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-
-  return `${date.toLocaleDateString()} ${date.toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit',
-  })}`;
-}
-
-function previewText(item: SessionHistoryItem): string {
-  const text = item.transcript || item.errorText || 'No transcript captured.';
-  return text.length > 160 ? `${text.slice(0, 160)}...` : text;
-}
-
 const styles = StyleSheet.create({
   layout: {
+    flex: 1,
     gap: 14,
     paddingBottom: 14,
     width: '100%',
@@ -266,56 +228,13 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: 14,
     borderWidth: 1,
-    maxHeight: 310,
-    minHeight: 230,
+    flex: 1,
+    minHeight: 260,
     width: '100%',
   },
   transcriptWrap: {
+    flexGrow: 1,
     padding: 14,
-  },
-  historyPanel: {
-    backgroundColor: colors.panel,
-    borderColor: colors.border,
-    borderRadius: 14,
-    borderWidth: 1,
-    minHeight: 160,
-    width: '100%',
-  },
-  historyList: {
-    maxHeight: 220,
-  },
-  historyWrap: {
-    gap: 10,
-    padding: 14,
-    paddingTop: 8,
-  },
-  historyItem: {
-    borderBottomColor: colors.border,
-    borderBottomWidth: 1,
-    paddingBottom: 10,
-  },
-  historyMeta: {
-    color: colors.muted,
-    fontSize: 12,
-    fontWeight: '700',
-    textTransform: 'capitalize',
-  },
-  historyText: {
-    color: colors.ink,
-    fontSize: 14,
-    lineHeight: 20,
-    marginTop: 4,
-  },
-  historyBadge: {
-    color: colors.good,
-    fontSize: 12,
-    fontWeight: '700',
-    marginTop: 4,
-    textTransform: 'uppercase',
-  },
-  emptyText: {
-    color: colors.muted,
-    fontSize: 14,
   },
   sectionTitle: {
     color: colors.muted,

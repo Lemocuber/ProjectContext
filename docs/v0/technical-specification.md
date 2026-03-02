@@ -5,14 +5,21 @@
 - TypeScript
 - Android target only
 - DashScope FunASR WebSocket API for real-time ASR
+- `expo-av` for in-app session audio playback
 
 ## Architecture
-- JS/UI layer: screens, state, session display.
+- JS/UI layer:
+  - Record tab (start/stop + live transcript)
+  - History tab (persisted sessions list + inline expansion)
+  - Settings tab (BYOK key input)
 - Native-backed audio stream layer:
   - `react-native-live-audio-stream` captures low-latency PCM chunks.
   - JS service streams PCM frames to DashScope WebSocket.
   - Service persists PCM as per-session WAV file.
   - Service emits transcript/status events to UI.
+- Playback layer:
+  - History expansion uses stored `audioFileUri`.
+  - `expo-av` loads, plays, pauses, and stops local WAV files.
 - Transcript processing:
   - Single transcript stream in UI.
   - Realtime text updates from `result-generated` events.
