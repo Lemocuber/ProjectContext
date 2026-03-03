@@ -20,15 +20,16 @@ Project Context starts as an Android-first voice capture tool with real-time tra
 ### Phase 2: V1 Capture Intelligence (Planned)
 - Add highlight button during recording.
 - Save highlight timestamps.
-- Map highlights to transcript windows after finalization.
+- Map highlights to finalized sentence lines after finalization.
 - Add speaker diarization in finalized transcript output.
-- Add custom vocabulary support for ASR sessions.
+- Add custom vocabulary textarea UI (one term per line), sync to vocabulary service, and wire internal `vocabulary_id` to ASR session startup calls.
 
-### Phase 3: V1 LLM Outputs and Export (Planned)
+### Phase 3: V1 Title and Export (Planned)
 - Add LLM-generated session title after finalization.
-- Add LLM-generated markdown session summary document.
-- Add markdown export and audio export from session history/detail.
-- Keep LLM outputs auditable against raw transcript text.
+- Add finalized markdown transcript artifact with timestamped sentence lines.
+- Add markdown auto-export to `Downloads` after finalize.
+- Add manual markdown and audio export from session history/detail.
+- Keep fallback title until LLM title generation completes.
 
 ### Phase 4: Ask AI Insights (Planned)
 - Add "What do you think" action after session finalization.
@@ -43,6 +44,6 @@ Project Context starts as an Android-first voice capture tool with real-time tra
 ## Success Criteria By Stage
 - Phase 1: v0 accepted on-device with reliable realtime final transcripts and browseable local history.
 - Phase 2: users can mark key moments, view speaker-attributed transcripts, and run ASR with custom vocabulary.
-- Phase 3: users get an LLM title + markdown summary and can export markdown/audio artifacts.
+- Phase 3: users get fallback-to-LLM title behavior, finalized markdown transcripts, and reliable export flows.
 - Phase 4: users get useful context-aware AI feedback.
 - Phase 5: stable enough for wider pilot use.
