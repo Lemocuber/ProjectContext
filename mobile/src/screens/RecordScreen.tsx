@@ -1,13 +1,30 @@
 import { useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, ToastAndroid, View } from 'react-native';
 import { dashscopeRealtimeSessionService } from '../services/asr/dashscopeRealtimeSession';
 import type { AsrSession, RecordingStatus } from '../services/asr/types';
+import { exportTextToDownloads } from '../services/export/downloadsExportService';
+import {
+  anchorHighlightTaps,
+  buildFallbackTitle,
+  collectHighlightTexts,
+  ensureFinalizedSentences,
+} from '../services/session/sessionFormatting';
+import { generateSessionTitle } from '../services/title/deepseekTitleService';
+import {
+  buildMarkdownFileName,
+  buildTranscriptMarkdown,
+  overwriteTranscriptMarkdown,
+  saveTranscriptMarkdown,
+} from '../services/transcript/transcriptMarkdown';
 import { loadApiKey } from '../storage/apiKeyStore';
+import { loadDeepSeekApiKey } from '../storage/deepseekKeyStore';
 import {
   appendSessionHistory,
-  type SessionHistoryItem,
-  type SessionHistoryStatus,
+  updateSessionHistoryItem,
 } from '../storage/sessionHistoryStore';
+import { loadVocabularySettings } from '../storage/vocabularySettingsStore';
+import type { AsrEvent } from '../services/asr/types';
+import type { SessionHistoryItem } from '../types/session';
 import { colors } from '../theme';
 
 type RecordScreenProps = {
@@ -19,11 +36,16 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
   const [transcriptText, setTranscriptText] = useState('');
   const [errorText, setErrorText] = useState('');
   const [infoText, setInfoText] = useState('');
+  const [highlightCount, setHighlightCount] = useState(0);
   const sessionRef = useRef<AsrSession | null>(null);
   const transcriptRef = useRef('');
   const startAtRef = useRef<string | null>(null);
+  const startAtMsRef = useRef<number>(0);
   const sessionIdRef = useRef('');
   const persistedRef = useRef(false);
+  const highlightTapsMsRef = useRef<number[]>([]);
+  const appliedVocabularyIdRef = useRef<string | undefined>(undefined);
+  const appliedVocabularyTermsRef = useRef<string[]>([]);
 
   const statusLabel = useMemo(() => {
     if (status === 'recording') return 'Recording';
@@ -32,28 +54,131 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
     return 'Idle';
   }, [status]);
 
-  const persistSession = async (next: {
-    status: SessionHistoryStatus;
-    transcript?: string;
-    errorText?: string;
-    audioFileUri?: string | null;
-  }) => {
+  const persistSession = async (item: SessionHistoryItem) => {
     if (persistedRef.current) return;
-    if (!startAtRef.current || !sessionIdRef.current) return;
+    if (!sessionIdRef.current) return;
 
     persistedRef.current = true;
-    const item: SessionHistoryItem = {
-      id: sessionIdRef.current,
-      startedAt: startAtRef.current,
-      endedAt: new Date().toISOString(),
-      status: next.status,
-      transcript: next.transcript ?? transcriptRef.current,
-      errorText: next.errorText,
-      audioFileUri: next.audioFileUri ?? undefined,
-    };
-
     await appendSessionHistory(item);
     onHistoryUpdated?.();
+  };
+
+  const persistFailedSession = async (params: { message: string; audioFileUri?: string | null }) => {
+    if (!startAtRef.current || !sessionIdRef.current) return;
+    const startedAt = startAtRef.current;
+    const endedAt = new Date().toISOString();
+    const fallbackTitle = buildFallbackTitle(startedAt);
+    await persistSession({
+      id: sessionIdRef.current,
+      startedAt,
+      endedAt,
+      status: 'failed',
+      transcript: transcriptRef.current,
+      errorText: params.message,
+      audioFileUri: params.audioFileUri ?? undefined,
+      fallbackTitle,
+      highlightTapsMs: [...highlightTapsMsRef.current],
+      finalizedSentences: [],
+      appliedVocabularyId: appliedVocabularyIdRef.current,
+      appliedVocabularyTerms: [...appliedVocabularyTermsRef.current],
+      titleStatus: 'failed',
+    });
+  };
+
+  const toast = (message: string) => {
+    if (Platform.OS === 'android') {
+      ToastAndroid.show(message, ToastAndroid.SHORT);
+    }
+  };
+
+  const finalizeCompletedSession = async (event: Extract<AsrEvent, { type: 'final' }>) => {
+    if (!startAtRef.current || !sessionIdRef.current) return;
+
+    const startedAt = startAtRef.current;
+    const endedAt = new Date().toISOString();
+    const fallbackTitle = buildFallbackTitle(startedAt);
+    const finalizedSentences = anchorHighlightTaps(
+      ensureFinalizedSentences(event.finalizedSentences, event.text),
+      highlightTapsMsRef.current,
+    );
+
+    const fallbackMarkdown = buildTranscriptMarkdown({
+      title: fallbackTitle,
+      startedAt,
+      endedAt,
+      sentences: finalizedSentences,
+    });
+    const transcriptMarkdownUri = saveTranscriptMarkdown(sessionIdRef.current, fallbackMarkdown);
+    const markdownFileName = buildMarkdownFileName(startedAt, fallbackTitle);
+
+    let markdownAutoExportStatus: 'completed' | 'failed' = 'failed';
+    let markdownLastPath: string | undefined;
+    try {
+      markdownLastPath = await exportTextToDownloads({
+        fileName: markdownFileName,
+        content: fallbackMarkdown,
+      });
+      markdownAutoExportStatus = 'completed';
+      toast('Markdown exported to Downloads.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Markdown auto-export failed.';
+      toast(message);
+    }
+
+    const deepSeekApiKey = (await loadDeepSeekApiKey())?.trim() || '';
+    const hasDeepSeekKey = !!deepSeekApiKey;
+    const titleStatus = hasDeepSeekKey ? 'pending' : 'failed';
+    await persistSession({
+      id: sessionIdRef.current,
+      startedAt,
+      endedAt,
+      status: 'completed',
+      transcript: event.text,
+      fallbackTitle,
+      highlightTapsMs: [...highlightTapsMsRef.current],
+      finalizedSentences,
+      audioFileUri: event.audioFileUri ?? undefined,
+      appliedVocabularyId: appliedVocabularyIdRef.current,
+      appliedVocabularyTerms: [...appliedVocabularyTermsRef.current],
+      titleStatus,
+      transcriptMarkdownUri,
+      exportMetadata: {
+        markdownAutoExportStatus,
+        markdownExportedAt: markdownAutoExportStatus === 'completed' ? new Date().toISOString() : undefined,
+        markdownLastPath,
+      },
+    });
+
+    if (!hasDeepSeekKey || !event.text.trim()) return;
+
+    try {
+      const title = await generateSessionTitle({
+        apiKey: deepSeekApiKey,
+        transcript: event.text,
+        highlights: collectHighlightTexts(finalizedSentences),
+      });
+
+      const nextMarkdown = buildTranscriptMarkdown({
+        title,
+        startedAt,
+        endedAt,
+        sentences: finalizedSentences,
+      });
+      overwriteTranscriptMarkdown(transcriptMarkdownUri, nextMarkdown);
+
+      await updateSessionHistoryItem(sessionIdRef.current, (item) => ({
+        ...item,
+        generatedTitle: title,
+        titleStatus: 'completed',
+      }));
+      onHistoryUpdated?.();
+    } catch {
+      await updateSessionHistoryItem(sessionIdRef.current, (item) => ({
+        ...item,
+        titleStatus: 'failed',
+      }));
+      onHistoryUpdated?.();
+    }
   };
 
   const start = async () => {
@@ -71,13 +196,26 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
     transcriptRef.current = '';
     setErrorText('');
     setInfoText('');
+    setHighlightCount(0);
     startAtRef.current = new Date().toISOString();
+    startAtMsRef.current = Date.now();
     sessionIdRef.current = buildSessionId();
     persistedRef.current = false;
+    highlightTapsMsRef.current = [];
+    appliedVocabularyIdRef.current = undefined;
+    appliedVocabularyTermsRef.current = [];
+
+    const vocabularySettings = await loadVocabularySettings();
+    const vocabularyId = vocabularySettings.syncStatus === 'failed' ? undefined : vocabularySettings.vocabularyId;
+    if (vocabularyId) {
+      appliedVocabularyIdRef.current = vocabularyId;
+      appliedVocabularyTermsRef.current = [...vocabularySettings.terms];
+    }
 
     try {
       sessionRef.current = await dashscopeRealtimeSessionService.start({
         apiKey,
+        vocabularyId,
         onEvent: (event) => {
           if (event.type === 'live') {
             transcriptRef.current = event.text;
@@ -86,13 +224,26 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
           if (event.type === 'final') {
             transcriptRef.current = event.text;
             setTranscriptText(event.text);
-            setStatus('idle');
-            setInfoText('');
-            void persistSession({
-              status: 'completed',
-              transcript: event.text,
-              audioFileUri: event.audioFileUri,
-            });
+            setInfoText('Finalizing session...');
+            void (async () => {
+              let failed = false;
+              try {
+                await finalizeCompletedSession(event);
+              } catch (error) {
+                failed = true;
+                const message =
+                  error instanceof Error ? error.message : 'Failed to finalize session.';
+                setErrorText(message);
+                setStatus('failed');
+                await persistFailedSession({
+                  message,
+                  audioFileUri: event.audioFileUri,
+                });
+              } finally {
+                setInfoText('');
+                if (!failed) setStatus('idle');
+              }
+            })();
           }
           if (event.type === 'status') {
             setInfoText(event.message);
@@ -101,9 +252,8 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
             setErrorText(event.message);
             setStatus('failed');
             setInfoText('');
-            void persistSession({
-              status: 'failed',
-              errorText: event.message,
+            void persistFailedSession({
+              message: event.message,
               audioFileUri: event.audioFileUri,
             });
           }
@@ -114,7 +264,7 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
       const message = error instanceof Error ? error.message : 'Failed to start audio session.';
       setErrorText(message);
       setInfoText('');
-      await persistSession({ status: 'failed', errorText: message });
+      await persistFailedSession({ message });
     }
   };
 
@@ -128,10 +278,17 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
       const message = error instanceof Error ? error.message : 'Failed to stop audio session.';
       setErrorText(message);
       setInfoText('');
-      await persistSession({ status: 'failed', errorText: message });
+      await persistFailedSession({ message });
     } finally {
       sessionRef.current = null;
     }
+  };
+
+  const markHighlight = () => {
+    if (!startAtMsRef.current || status !== 'recording') return;
+    const tapMs = Math.max(0, Date.now() - startAtMsRef.current);
+    highlightTapsMsRef.current = [...highlightTapsMsRef.current, tapMs];
+    setHighlightCount(highlightTapsMsRef.current.length);
   };
 
   const isRecording = status === 'recording';
@@ -155,6 +312,15 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
       >
         <Text style={styles.recordButtonText}>{recordButtonText}</Text>
       </Pressable>
+
+      <Pressable
+        disabled={!isRecording}
+        onPress={markHighlight}
+        style={[styles.highlightButton, !isRecording ? styles.highlightButtonDisabled : null]}
+      >
+        <Text style={styles.highlightButtonText}>Mark Highlight</Text>
+      </Pressable>
+      <Text style={styles.highlightCountText}>Highlights: {highlightCount}</Text>
 
       {errorText ? <Text style={styles.errorText}>{errorText}</Text> : null}
       {infoText ? <Text style={styles.infoText}>{infoText}</Text> : null}
@@ -211,6 +377,28 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 24,
     fontWeight: '800',
+    textAlign: 'center',
+  },
+  highlightButton: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    backgroundColor: colors.ink,
+    borderRadius: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
+  highlightButtonDisabled: {
+    backgroundColor: colors.border,
+  },
+  highlightButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  highlightCountText: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '700',
     textAlign: 'center',
   },
   errorText: {

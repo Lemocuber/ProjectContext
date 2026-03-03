@@ -1,21 +1,25 @@
 # Risks and Open Questions (V1)
 
-Date: 2026-03-02
+Date: 2026-03-03
 
 ## Risks
 - Diarization quality may vary significantly by environment and overlap.
 - Vocabulary misconfiguration can degrade recognition quality.
-- LLM latency/cost can impact post-session turnaround and user trust.
-- Export behavior can vary across Android versions and share targets.
+- LLM title latency can delay replacement of fallback title.
+- Auto-export behavior to `Downloads` can vary across Android versions and permissions.
+- Highlight taps near sentence boundaries may anchor to user-unexpected lines.
 
 ## Mitigations
-- Preserve non-diarized transcript as baseline fallback.
-- Validate vocabulary ID format and allow opt-out per user/session.
-- Keep LLM outputs optional with explicit failure states.
-- Add export error handling and retry path without data loss.
+- Preserve non-diarized transcript as baseline fallback (omit speaker labels when unavailable).
+- Validate vocabulary textarea input (trim/dedupe/empty-line handling) and fail safely when sync API errors occur.
+- Keep fallback title always available; treat LLM title as optional enhancement.
+- Keep in-app markdown copy as source-of-truth even if export fails, plus manual export path.
+- Use deterministic highlight anchoring rules and test boundary cases.
 
-## Open Questions
-- Which LLM model and prompt budget are acceptable for title + markdown summary?
-- Should title/summary generation run automatically or require a user-triggered action?
-- Should markdown export include full transcript by default or summary-first with optional appendix?
-- Do we need per-session vocabulary override, or is a global setting enough for v1?
+## Resolved Decisions (2026-03-03)
+- LLM title generation uses DeepSeek via BYOK for v1.
+- Vocabulary configuration is global in Settings for v1 (no per-session override).
+- Auto-export does not retry automatically on next launch after failure; manual export remains the retry path.
+- Auto-export shows toast feedback for success/failure.
+- V1 storage is a clean schema break from v0 (no migration/backward compatibility path required).
+- Android `Downloads` export uses Expo SAF permission with cached directory URI.

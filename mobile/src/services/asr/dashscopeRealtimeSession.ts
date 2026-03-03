@@ -2,6 +2,7 @@ import { Buffer } from 'buffer';
 import { Directory, File, Paths } from 'expo-file-system';
 import LiveAudioStream from 'react-native-live-audio-stream';
 import { PermissionsAndroid, Platform } from 'react-native';
+import type { FinalizedSentence } from '../../types/session';
 import type { AsrSession, AsrSessionService } from './types';
 
 const DASHSCOPE_WS_URL = 'wss://dashscope.aliyuncs.com/api-ws/v1/inference/';
@@ -33,13 +34,29 @@ type SocketEventPayload = {
   payload?: {
     output?: {
       sentence?: {
+        begin_time?: number | null;
+        end_time?: number | null;
         text?: string;
         heartbeat?: boolean | null;
         sentence_end?: boolean;
+        speaker_id?: number | string | null;
+        speaker?: number | string | null;
+        spk_id?: number | string | null;
+        words?: Array<{
+          begin_time?: number | null;
+          end_time?: number | null;
+          text?: string;
+          speaker_id?: number | string | null;
+          speaker?: number | string | null;
+          spk_id?: number | string | null;
+        }>;
       };
     };
   };
 };
+type SentencePayload = NonNullable<
+  NonNullable<NonNullable<SocketEventPayload['payload']>['output']>['sentence']
+>;
 
 function buildTaskId(): string {
   const seed = `${Date.now().toString(16)}${Math.random().toString(16).slice(2)}${Math.random()
@@ -48,12 +65,78 @@ function buildTaskId(): string {
   return seed.slice(0, 32);
 }
 
-function joinTranscript(finalized: string[], partial: string): string {
-  return [...finalized, partial]
+function joinTranscript(finalized: FinalizedSentence[], partial: string): string {
+  return [...finalized.map((entry) => entry.text), partial]
     .filter(Boolean)
     .join(' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function asMs(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  return Math.max(0, Math.floor(value));
+}
+
+function formatSpeaker(value: unknown): string | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return `Speaker ${value}`;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    if (/^speaker\s+\d+$/i.test(trimmed)) {
+      return `Speaker ${trimmed.replace(/[^\d]/g, '')}`;
+    }
+    if (/^\d+$/.test(trimmed)) return `Speaker ${trimmed}`;
+    return trimmed;
+  }
+  return undefined;
+}
+
+function pickSpeakerLabel(sentence: SentencePayload): string | undefined {
+  if (!sentence || typeof sentence !== 'object') return undefined;
+
+  const data = sentence as {
+    speaker_id?: unknown;
+    speaker?: unknown;
+    spk_id?: unknown;
+    words?: Array<{ speaker_id?: unknown; speaker?: unknown; spk_id?: unknown }>;
+  };
+  const direct =
+    formatSpeaker(data.speaker_id) || formatSpeaker(data.speaker) || formatSpeaker(data.spk_id);
+  if (direct) return direct;
+
+  if (!Array.isArray(data.words) || !data.words.length) return undefined;
+  const first = data.words[0];
+  return formatSpeaker(first?.speaker_id) || formatSpeaker(first?.speaker) || formatSpeaker(first?.spk_id);
+}
+
+function toFinalizedSentence(params: {
+  sentence: SentencePayload;
+  text: string;
+  previousEndMs: number;
+}): FinalizedSentence {
+  const sentence = params.sentence as {
+    begin_time?: unknown;
+    end_time?: unknown;
+    words?: Array<{ begin_time?: unknown; end_time?: unknown }>;
+  };
+  const words = Array.isArray(sentence.words) ? sentence.words : [];
+  const firstWord = words.length ? words[0] : undefined;
+  const lastWord = words.length ? words[words.length - 1] : undefined;
+
+  const startMs =
+    asMs(sentence.begin_time) ??
+    asMs(firstWord?.begin_time) ??
+    asMs(params.previousEndMs) ??
+    0;
+  const endMs = asMs(sentence.end_time) ?? asMs(lastWord?.end_time) ?? startMs;
+
+  return {
+    startMs,
+    endMs,
+    text: params.text,
+    speakerLabel: pickSpeakerLabel(params.sentence),
+  };
 }
 
 function parseSocketPayload(raw: unknown): SocketEventPayload | null {
@@ -126,11 +209,12 @@ async function requestMicPermission(): Promise<void> {
 }
 
 export const dashscopeRealtimeSessionService: AsrSessionService = {
-  async start({ apiKey, onEvent }): Promise<AsrSession> {
+  async start({ apiKey, vocabularyId, onEvent }): Promise<AsrSession> {
     await requestMicPermission();
 
-    const finalizedSentences: string[] = [];
+    const finalizedSentences: FinalizedSentence[] = [];
     let partialSentence = '';
+    let lastFinalEndMs = 0;
     const recordingId = buildTaskId();
     const audioChunks: Buffer[] = [];
     let audioBytes = 0;
@@ -210,6 +294,7 @@ export const dashscopeRealtimeSessionService: AsrSessionService = {
         type: 'final',
         text: joinTranscript(finalizedSentences, partialSentence),
         audioFileUri: persistAudioOnce(),
+        finalizedSentences: [...finalizedSentences],
       });
     };
 
@@ -297,6 +382,15 @@ export const dashscopeRealtimeSessionService: AsrSessionService = {
         clearTimer(openTimer);
         openTimer = null;
 
+        const parameters: Record<string, unknown> = {
+          format: 'pcm',
+          sample_rate: 16000,
+          semantic_punctuation_enabled: true,
+        };
+        if (vocabularyId?.trim()) {
+          parameters.vocabulary_id = vocabularyId.trim();
+        }
+
         socket.send(
           JSON.stringify({
             header: {
@@ -309,11 +403,7 @@ export const dashscopeRealtimeSessionService: AsrSessionService = {
               task: 'asr',
               function: 'recognition',
               model: 'fun-asr-realtime',
-              parameters: {
-                format: 'pcm',
-                sample_rate: 16000,
-                semantic_punctuation_enabled: true,
-              },
+              parameters,
               input: {},
             },
           }),
@@ -401,7 +491,13 @@ export const dashscopeRealtimeSessionService: AsrSessionService = {
         if (!text) return;
 
         if (sentence.sentence_end) {
-          finalizedSentences.push(text);
+          const finalized = toFinalizedSentence({
+            sentence,
+            text,
+            previousEndMs: lastFinalEndMs,
+          });
+          finalizedSentences.push(finalized);
+          lastFinalEndMs = finalized.endMs;
           partialSentence = '';
           emitLive();
           return;
@@ -454,7 +550,12 @@ export const dashscopeRealtimeSessionService: AsrSessionService = {
       );
 
       if (partialSentence) {
-        finalizedSentences.push(partialSentence);
+        const fallbackStart = Math.max(0, lastFinalEndMs);
+        finalizedSentences.push({
+          startMs: fallbackStart,
+          endMs: fallbackStart,
+          text: partialSentence,
+        });
         partialSentence = '';
         emitLive();
       }

@@ -8,9 +8,19 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  ToastAndroid,
   View,
 } from 'react-native';
-import { loadSessionHistory, type SessionHistoryItem } from '../storage/sessionHistoryStore';
+import { exportFileToDownloads, exportTextToDownloads } from '../services/export/downloadsExportService';
+import {
+  buildMarkdownFileName,
+  loadTranscriptMarkdown,
+} from '../services/transcript/transcriptMarkdown';
+import {
+  loadSessionHistory,
+  updateSessionHistoryItem,
+} from '../storage/sessionHistoryStore';
+import { getSessionTitle, type SessionHistoryItem } from '../types/session';
 import { colors } from '../theme';
 
 type HistoryScreenProps = {
@@ -36,6 +46,9 @@ export function HistoryScreen({ refreshToken }: HistoryScreenProps) {
   const [selectedItem, setSelectedItem] = useState<SessionHistoryItem | null>(null);
   const [playerState, setPlayerState] = useState<PlayerState>(EMPTY_PLAYER_STATE);
   const [audioError, setAudioError] = useState('');
+  const [exportError, setExportError] = useState('');
+  const [exportingMarkdown, setExportingMarkdown] = useState(false);
+  const [exportingAudio, setExportingAudio] = useState(false);
   const [loadingAudio, setLoadingAudio] = useState(false);
   const [isSeeking, setIsSeeking] = useState(false);
   const [seekPositionMillis, setSeekPositionMillis] = useState(0);
@@ -139,6 +152,7 @@ export function HistoryScreen({ refreshToken }: HistoryScreenProps) {
     loadSeqRef.current += 1;
     setSelectedItem(null);
     setAudioError('');
+    setExportError('');
     await unloadSound();
   }, [unloadSound]);
 
@@ -168,6 +182,90 @@ export function HistoryScreen({ refreshToken }: HistoryScreenProps) {
       setAudioError(error instanceof Error ? error.message : 'Failed to play saved audio.');
     }
   }, [loadSoundForItem, selectedItem]);
+
+  const showToast = useCallback((message: string) => {
+    ToastAndroid.show(message, ToastAndroid.SHORT);
+  }, []);
+
+  const refreshSelectedItem = useCallback(
+    async (id: string) => {
+      const list = await loadSessionHistory();
+      setHistory(list);
+      const next = list.find((entry) => entry.id === id) ?? null;
+      setSelectedItem(next);
+    },
+    [],
+  );
+
+  const exportMarkdown = useCallback(async () => {
+    const item = selectedItem;
+    if (!item || !item.transcriptMarkdownUri) {
+      setExportError('No markdown artifact available for this session.');
+      return;
+    }
+
+    setExportError('');
+    setExportingMarkdown(true);
+    try {
+      const content = await loadTranscriptMarkdown(item.transcriptMarkdownUri);
+      const title = getSessionTitle(item);
+      const fileName = buildMarkdownFileName(item.startedAt, title);
+      const exportedUri = await exportTextToDownloads({
+        fileName,
+        content,
+      });
+
+      await updateSessionHistoryItem(item.id, (current) => ({
+        ...current,
+        exportMetadata: {
+          ...current.exportMetadata,
+          markdownExportedAt: new Date().toISOString(),
+          markdownLastPath: exportedUri,
+        },
+      }));
+      await refreshSelectedItem(item.id);
+      showToast('Markdown exported.');
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : 'Markdown export failed.');
+    } finally {
+      setExportingMarkdown(false);
+    }
+  }, [refreshSelectedItem, selectedItem, showToast]);
+
+  const exportAudio = useCallback(async () => {
+    const item = selectedItem;
+    if (!item || !item.audioFileUri) {
+      setExportError('No audio file available for this session.');
+      return;
+    }
+
+    setExportError('');
+    setExportingAudio(true);
+    try {
+      const title = getSessionTitle(item);
+      const fileName = `${buildMarkdownFileName(item.startedAt, title).replace(/\.md$/i, '')}.wav`;
+      const exportedUri = await exportFileToDownloads({
+        fileName,
+        sourceFileUri: item.audioFileUri,
+        mimeType: 'audio/wav',
+      });
+
+      await updateSessionHistoryItem(item.id, (current) => ({
+        ...current,
+        exportMetadata: {
+          ...current.exportMetadata,
+          audioExportedAt: new Date().toISOString(),
+          audioLastPath: exportedUri,
+        },
+      }));
+      await refreshSelectedItem(item.id);
+      showToast('Audio exported.');
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : 'Audio export failed.');
+    } finally {
+      setExportingAudio(false);
+    }
+  }, [refreshSelectedItem, selectedItem, showToast]);
 
   const stopPlayback = useCallback(async () => {
     const sound = soundRef.current;
@@ -238,6 +336,7 @@ export function HistoryScreen({ refreshToken }: HistoryScreenProps) {
                 <Text style={styles.itemMeta}>
                   {formatSessionTime(item.startedAt)} • {item.status}
                 </Text>
+                <Text style={styles.itemTitle}>{getSessionTitle(item)}</Text>
                 <Text style={styles.itemPreview}>{previewText(item)}</Text>
                 <View style={styles.itemFooter}>
                   {item.audioFileUri ? <Text style={styles.audioBadge}>Audio saved</Text> : null}
@@ -269,10 +368,17 @@ export function HistoryScreen({ refreshToken }: HistoryScreenProps) {
 
             {selectedItem ? (
               <ScrollView contentContainerStyle={styles.modalBody}>
+                <Text style={styles.sessionTitle}>{getSessionTitle(selectedItem)}</Text>
                 <Text style={styles.detailMeta}>
                   {formatSessionRange(selectedItem.startedAt, selectedItem.endedAt)}
                 </Text>
                 <Text style={styles.detailMeta}>Status: {selectedItem.status}</Text>
+                <Text style={styles.detailMeta}>Title status: {selectedItem.titleStatus || 'n/a'}</Text>
+                {selectedItem.exportMetadata?.markdownAutoExportStatus ? (
+                  <Text style={styles.detailMeta}>
+                    Auto-export: {selectedItem.exportMetadata.markdownAutoExportStatus}
+                  </Text>
+                ) : null}
                 {selectedItem.errorText ? <Text style={styles.errorText}>{selectedItem.errorText}</Text> : null}
 
                 <View style={styles.playerCard}>
@@ -321,6 +427,29 @@ export function HistoryScreen({ refreshToken }: HistoryScreenProps) {
                 <Text style={styles.transcriptText}>
                   {selectedItem.transcript || 'No transcript captured.'}
                 </Text>
+
+                <View style={styles.exportRow}>
+                  <Pressable
+                    disabled={exportingMarkdown}
+                    onPress={() => void exportMarkdown()}
+                    style={styles.audioButton}
+                  >
+                    <Text style={styles.audioButtonText}>
+                      {exportingMarkdown ? 'Exporting...' : 'Export Markdown'}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    disabled={exportingAudio}
+                    onPress={() => void exportAudio()}
+                    style={styles.audioButtonSecondary}
+                  >
+                    <Text style={styles.audioButtonSecondaryText}>
+                      {exportingAudio ? 'Exporting...' : 'Export Audio'}
+                    </Text>
+                  </Pressable>
+                </View>
+
+                {exportError ? <Text style={styles.errorText}>{exportError}</Text> : null}
               </ScrollView>
             ) : null}
           </View>
@@ -413,6 +542,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
+  itemTitle: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: '700',
+  },
   itemFooter: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -480,6 +614,11 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingBottom: 18,
   },
+  sessionTitle: {
+    color: colors.ink,
+    fontSize: 18,
+    fontWeight: '800',
+  },
   detailMeta: {
     color: colors.muted,
     fontSize: 12,
@@ -542,6 +681,10 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 14,
     lineHeight: 21,
+  },
+  exportRow: {
+    flexDirection: 'row',
+    gap: 8,
   },
   noAudioText: {
     color: colors.muted,

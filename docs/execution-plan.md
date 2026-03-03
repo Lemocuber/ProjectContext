@@ -2,7 +2,7 @@
 
 ## Current Sprint Focus
 1. Lock v1 scope and acceptance criteria in docs.
-2. Implement v1 in dependency order: capture features -> LLM outputs -> export.
+2. Implement v1 in dependency order: capture features -> final markdown transcript -> title generation -> export.
 
 ## Detailed Work Items
 
@@ -17,40 +17,46 @@
 ### 2) Workstream A: Highlight Marking (v1)
 - Add in-session highlight action during recording.
 - Persist highlight timestamps per session.
-- Resolve each timestamp to transcript windows after session finalization.
-- Status: planned.
+- Resolve each timestamp to finalized sentence lines after session finalization.
+- Status: implemented in code; pending manual phone validation.
 
 ### 3) Workstream B: Speaker and Vocabulary (v1)
 - Add speaker diarization in finalized transcript structure.
-- Expose vocabulary configuration path (BYOK-compatible) and apply it to ASR session start.
+- Expose vocabulary configuration UI in Settings (multiline textarea, one term per line).
+- Sync textarea terms to customization API (`create_vocabulary`/`update_vocabulary`) and apply internal `vocabulary_id` to ASR session start payload.
 - Persist speaker-attributed transcript and vocabulary metadata in history item.
-- Status: planned.
+- Status: implemented in code; pending manual phone validation.
 
-### 4) Workstream C: LLM Session Outputs (v1)
+### 4) Workstream C: Transcript Artifact and Title (v1)
+- Generate finalized markdown transcript from sentence-level ASR results.
 - Generate one concise session title from finalized transcript + highlights.
-- Generate one markdown session summary document.
-- Persist generated outputs with source-session linkage and generation status.
-- Status: planned.
+- Apply fallback title immediately and replace with LLM title on completion.
+- Persist markdown URI, title, and generation status.
+- Status: implemented in code; pending manual phone validation.
 
 ### 5) Workstream D: Export Features (v1)
-- Add markdown export action from history/detail.
-- Add audio export action from history/detail.
+- Auto-export markdown to `Downloads` after each finalized session.
+- Add manual markdown export action from history/detail.
+- Add manual audio export action from history/detail.
 - Ensure export works for completed sessions even after app restart.
-- Status: planned.
+- Status: implemented in code; pending manual phone validation.
 
 ## Validation Gates
 - Typecheck and CI pass.
 - Android APK build passes on GitHub Actions.
 - Manual phone test confirms end-to-end v1 flow:
-  - save API key and optional vocabulary setting
+  - save API key and edit/clear multiline vocabulary setting in Settings
   - start recording and place highlights
   - transcript updates while speaking
   - stop recording and finalize session
   - session appears in History with speaker-attributed transcript
-  - generated title and markdown summary are available
-  - markdown and audio export both succeed
-- Gate target: pending (v1 in progress).
+  - fallback title appears, then LLM title replacement status is handled correctly
+  - finalized markdown format matches spec (header/time range/separator/sentence lines)
+  - markdown auto-export succeeds
+  - manual markdown and audio export both succeed
+- Gate target: in progress (implementation complete, validation pending).
 
 ## References
 - `docs/v1/delivery-plan.md`
 - `docs/v1/technical-specification.md`
+- `docs/v1/implementation-report.md`
