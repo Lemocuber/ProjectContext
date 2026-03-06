@@ -119,58 +119,46 @@ function parseSentenceRecord(record: Record<string, unknown>): RawSentenceLike |
   };
 }
 
-function hasTiming(record: Record<string, unknown>): boolean {
-  return (
-    toNumber(record.begin_time) !== null ||
-    toNumber(record.start_time) !== null ||
-    toNumber(record.start_ms) !== null ||
-    toNumber(record.begin_ms) !== null ||
-    toNumber(record.end_time) !== null ||
-    toNumber(record.stop_time) !== null ||
-    toNumber(record.end_ms) !== null ||
-    toNumber(record.finish_time) !== null
-  );
-}
-
 function collectSentenceRecords(value: unknown): RawSentenceLike[] {
-  const out: RawSentenceLike[] = [];
+  const byContainer = new Map<string, RawSentenceLike[]>();
   const seen = new Set<string>();
+  const sentenceContainers = new Set(['sentences', 'segments', 'utterances']);
 
-  const pushSentence = (entry: RawSentenceLike | null) => {
+  const append = (container: string, entry: RawSentenceLike | null) => {
     if (!entry) return;
     const key = `${entry.startMs ?? -1}|${entry.endMs ?? -1}|${entry.speakerLabel || ''}|${entry.text}`;
     if (seen.has(key)) return;
     seen.add(key);
-    out.push(entry);
+    const list = byContainer.get(container) || [];
+    list.push(entry);
+    byContainer.set(container, list);
   };
 
-  const visit = (node: unknown) => {
+  const visit = (node: unknown, parentKey = '') => {
     if (Array.isArray(node)) {
+      const key = parentKey.trim().toLowerCase();
+      if (sentenceContainers.has(key)) {
+        for (const item of node) {
+          append(key, parseSentenceRecord(asObject(item) || {}));
+        }
+        return;
+      }
       for (const item of node) visit(item);
       return;
     }
     const obj = asObject(node);
     if (!obj) return;
 
-    if (Array.isArray(obj.sentences)) {
-      for (const sentence of obj.sentences) {
-        pushSentence(parseSentenceRecord(asObject(sentence) || {}));
-      }
-    }
-    if (Array.isArray(obj.segments)) {
-      for (const segment of obj.segments) {
-        pushSentence(parseSentenceRecord(asObject(segment) || {}));
-      }
-    }
-    if (typeof obj.text === 'string' && hasTiming(obj)) {
-      pushSentence(parseSentenceRecord(obj));
-    }
-
-    for (const value of Object.values(obj)) visit(value);
+    for (const [key, child] of Object.entries(obj)) visit(child, key);
   };
 
   visit(value);
-  return out;
+  const preferred = ['sentences', 'segments', 'utterances'];
+  for (const key of preferred) {
+    const list = byContainer.get(key);
+    if (list?.length) return list;
+  }
+  return [];
 }
 
 function pickFallbackTranscript(value: unknown): string {

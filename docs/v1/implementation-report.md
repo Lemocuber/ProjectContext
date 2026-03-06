@@ -37,6 +37,9 @@ V1 code was migrated to the corrected architecture where final transcript metada
   - moved finalized sentence derivation to recorded/file ASR service path,
   - updated markdown generation to avoid fabricated metadata in fallback mode.
 
+## Post-Implementation Fixes
+- Adjusted file-ASR parsing to use sentence containers only (`sentences` -> `segments` -> `utterances`) and avoid word-level token lines being rendered as transcript sentences.
+
 ## Validation Snapshot
 - `npm run typecheck` in `mobile/`: passed after migration.
 - Manual Android phone validation and CI/APK gates: pending.
