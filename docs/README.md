@@ -4,6 +4,7 @@ This directory tracks product definition, technical specs, implementation notes,
 
 ## Index
 - [DashScope ASR Docs](./dashscope-asr-docs/README.md)
+- [Tencent COS Docs](./tencent-cos-docs/README.md)
 - [V0 Spec Pack](./v0/README.md)
 - [V1 Spec Pack](./v1/README.md)
 - [Overall Roadmap](./overall-roadmap.md)

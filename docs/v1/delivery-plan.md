@@ -1,68 +1,70 @@
 # Delivery Plan (V1)
 
-Date: 2026-03-03
+Date: 2026-03-06
 
-## Implementation Status (2026-03-03)
-- Milestone 1 implementation: complete in code.
-- Milestone 2 implementation: complete in code.
-- Milestone 3 implementation: complete in code.
-- Remaining for acceptance: manual Android phone validation and CI/APK gate confirmation.
+## Implementation Status (Correction)
+- Previous v1 implementation plan assumed realtime ASR sentence metadata as final transcript source.
+- This is invalid for diarization requirements.
+- v1 is re-scoped to use post-record file ASR final pass for all final transcript metadata.
+- Remaining for acceptance: architecture rework in code, then manual Android validation and CI/APK gate confirmation.
 
-## Milestone 1: Capture Enrichment
-- Add highlight control during recording.
+## Milestone 1: Capture and Fallback Baseline
+- Keep realtime transcript for in-session display.
+- Persist raw realtime transcript as unprocessed fallback artifact.
 - Persist highlight tap timestamps with session metadata.
-- Persist sentence-level finalized transcript segments from ASR `sentence_end=true` results.
-- Add speaker diarization persistence path for finalized sentences.
-- Add vocabulary configuration UI in Settings (multiline textarea, one term per line).
-- Add vocabulary sync wiring (`create_vocabulary`/`update_vocabulary`) and ASR request wiring (`vocabulary_id` injection).
+- Keep vocabulary configuration UI in Settings (multiline textarea, one term per line).
+- Keep vocabulary sync wiring (`create_vocabulary`/`update_vocabulary`).
 
-## Milestone 2: Final Transcript and Title
-- Add finalized markdown transcript generation at stop/finalize.
-- Anchor highlight taps to finalized sentence lines.
-- Add title fallback strategy (`Record YY-MM-DD hh:mm`) at finalize.
-- Add asynchronous LLM title generation pipeline and replacement logic.
-- Persist title status/results and transcript markdown URI for history/detail UI.
+## Milestone 2: Post-Record Recognition Final Pass
+- Stage audio to COS after recording finalize.
+- Submit recorded audio to file ASR at finalize.
+- Poll/query async task until terminal state.
+- Parse finalized sentence-level timing and diarization output from file ASR results.
+- Persist `finalPassStatus` and sentence-level finalized transcript structure.
+- Anchor highlight taps to sentence lines only after file ASR success.
 
-## Milestone 3: Export
-- Auto-export markdown transcript to `Downloads` after each finalized session.
-- Add manual markdown export action for completed sessions.
-- Add manual audio export action for completed sessions.
-- Ensure export behavior survives app restart and repeated usage.
+## Milestone 3: Artifact, Title, and Export
+- Generate finalized markdown transcript from file ASR sentence results.
+- Fallback to raw realtime transcript artifact when file ASR fails.
+- Apply title fallback strategy (`Record YY-MM-DD hh:mm`) at finalize.
+- Run asynchronous LLM title generation and replacement logic.
+- Auto-export markdown transcript to `Downloads`.
+- Keep manual markdown/audio export actions for completed sessions.
 
 ## Acceptance Criteria (V1)
 - User can place highlights while recording.
 - Live transcript remains clean (no timestamp/speaker/highlight tags).
-- Finalized markdown transcript contains:
-  - title line,
-  - session time range/duration line with rounded minutes,
-  - separator line,
-  - sentence-level transcript lines with `[mm:ss]` timestamps.
-- Highlight taps resolve to sentence-level `[!IMPORTANT]` markers.
+- Raw realtime transcript is persisted for every session as fallback.
+- Session final pass uses an accessible COS HTTPS signed URL generated for app-uploaded audio.
+- Signed URL validity is handled explicitly (no silent success assumptions when URL expires).
+- Finalized markdown transcript uses file ASR output for sentence timestamps and speaker labels.
+- Highlight taps resolve to sentence-level `[!IMPORTANT]` markers only when file ASR succeeds.
 - Completed sessions include inline `[Speaker N]` labels when diarization data exists; omit labels when absent.
+- If file ASR fails, session remains usable with realtime fallback transcript and no fabricated speaker/timestamp tags.
 - User can set/update/clear vocabulary terms in Settings UI via multiline textarea (one term per line).
 - Vocabulary settings apply globally (no per-session override in v1).
-- Save/update action syncs terms to vocabulary service and stores internal `vocabularyId`.
-- Session startup request includes internal `vocabulary_id` when synced and omits it when cleared/unsynced.
-- Completed session metadata stores the applied vocabulary snapshot (`appliedVocabularyId`, `appliedVocabularyTerms`).
 - Each completed session has immediate fallback title, later replaced by LLM title when generation succeeds.
 - Markdown auto-export runs after finalize to `Downloads`.
 - Auto-export failure does not retry automatically on next app launch.
 - Auto-export emits toast feedback for success/failure.
 - Manual markdown/audio export actions are available in history/detail.
-- Core capture persistence remains intact even if title generation or export fails.
+- Core capture persistence remains intact even if file ASR/title generation/export fail.
 
 ## Validation Gates
 - Typecheck and CI pass.
 - Android APK build passes on GitHub Actions.
 - Manual phone validation confirms:
   - highlight capture during active recording,
-  - diarization visibility/fallback behavior,
-  - vocabulary terms can be edited in multiline Settings textarea,
-  - save/update triggers vocabulary sync API and stores internal `vocabulary_id`,
-  - vocabulary-enabled ASR startup payload includes `vocabulary_id`,
-  - cleared vocabulary removes `vocabulary_id` from startup payload,
+  - realtime transcript display remains clean while speaking,
+  - raw realtime transcript fallback is persisted,
+  - COS upload path validates successfully,
+  - signed URL remains valid through recognition completion in normal latency cases,
+  - expired/invalid URL path fails safely and records failure reason,
+  - post-record file ASR task submission/polling succeeds,
+  - diarization visibility/fallback behavior matches spec,
+  - fallback behavior when file ASR fails is safe and visible,
   - fallback title then LLM-title replacement behavior,
-  - markdown content formatting contract,
+  - markdown content formatting contract for success and fallback paths,
   - markdown auto-export to `Downloads`,
   - manual markdown export success,
   - manual audio export success.

@@ -1,8 +1,8 @@
 # Execution Plan
 
 ## Current Sprint Focus
-1. Lock v1 scope and acceptance criteria in docs.
-2. Implement v1 in dependency order: capture features -> final markdown transcript -> title generation -> export.
+1. Lock corrected v1 scope and acceptance criteria in docs (file-ASR final pass model).
+2. Rework v1 in dependency order: capture/fallback persistence -> file ASR final pass -> markdown/title/export integration.
 
 ## Detailed Work Items
 
@@ -14,32 +14,40 @@
 - History UX: implemented (History tab + detail card + in-app player with scrubber/timestamps).
 - Status: complete and accepted as v0 baseline.
 
-### 2) Workstream A: Highlight Marking (v1)
+### 2) Correction Note (as of 2026-03-06)
+- Previous v1 design incorrectly treated realtime ASR metadata as final transcript source.
+- Realtime ASR does not provide reliable diarization for v1 needs.
+- Finalized transcript metadata (timestamps/speakers/highlight anchoring) now requires post-record file ASR.
+
+### 3) Workstream A: Capture + Fallback (v1)
 - Add in-session highlight action during recording.
 - Persist highlight timestamps per session.
-- Resolve each timestamp to finalized sentence lines after session finalization.
-- Status: implemented in code; pending manual phone validation.
+- Persist unprocessed realtime transcript copy as fallback artifact.
+- Status: partially implemented (highlight capture exists); fallback persistence path needs explicit lock-in/validation.
 
-### 3) Workstream B: Speaker and Vocabulary (v1)
-- Add speaker diarization in finalized transcript structure.
+### 4) Workstream B: Post-Record Recognition + Vocabulary (v1)
+- Add COS staging path (BYOK upload) for recorded audio.
+- Add file ASR submission and async task polling after recording stops.
+- Add speaker diarization in finalized transcript structure from file ASR output.
 - Expose vocabulary configuration UI in Settings (multiline textarea, one term per line).
-- Sync textarea terms to customization API (`create_vocabulary`/`update_vocabulary`) and apply internal `vocabulary_id` to ASR session start payload.
+- Sync textarea terms to customization API (`create_vocabulary`/`update_vocabulary`) and apply internal `vocabulary_id` to recognition requests.
 - Persist speaker-attributed transcript and vocabulary metadata in history item.
-- Status: implemented in code; pending manual phone validation.
+- Status: vocabulary settings implemented; final-pass recognition wiring pending rework.
 
-### 4) Workstream C: Transcript Artifact and Title (v1)
-- Generate finalized markdown transcript from sentence-level ASR results.
+### 5) Workstream C: Transcript Artifact and Title (v1)
+- Generate finalized markdown transcript from post-record file ASR sentence results.
+- Provide fallback markdown content from raw realtime transcript when final pass fails.
 - Generate one concise session title from finalized transcript + highlights.
 - Apply fallback title immediately and replace with LLM title on completion.
 - Persist markdown URI, title, and generation status.
-- Status: implemented in code; pending manual phone validation.
+- Status: partially implemented; transcript source must switch to final-pass output.
 
-### 5) Workstream D: Export Features (v1)
+### 6) Workstream D: Export Features (v1)
 - Auto-export markdown to `Downloads` after each finalized session.
 - Add manual markdown export action from history/detail.
 - Add manual audio export action from history/detail.
 - Ensure export works for completed sessions even after app restart.
-- Status: implemented in code; pending manual phone validation.
+- Status: mostly implemented; validate behavior with both final-pass success and fallback transcript sessions.
 
 ## Validation Gates
 - Typecheck and CI pass.
@@ -49,12 +57,17 @@
   - start recording and place highlights
   - transcript updates while speaking
   - stop recording and finalize session
-  - session appears in History with speaker-attributed transcript
+  - raw realtime fallback transcript is persisted for the session
+  - COS staging path works (upload mode)
+  - signed URL expiry/fetch failure path is handled safely
+  - file ASR final pass status transitions are visible (`pending` -> `completed|failed`)
+  - session appears in History with speaker-attributed transcript when final pass succeeds
+  - session fallback transcript remains usable when final pass fails
   - fallback title appears, then LLM title replacement status is handled correctly
   - finalized markdown format matches spec (header/time range/separator/sentence lines)
   - markdown auto-export succeeds
   - manual markdown and audio export both succeed
-- Gate target: in progress (implementation complete, validation pending).
+- Gate target: in progress (architecture correction accepted; code rework + validation pending).
 
 ## References
 - `docs/v1/delivery-plan.md`
