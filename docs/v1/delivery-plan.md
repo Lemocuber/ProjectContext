@@ -15,7 +15,7 @@ Date: 2026-03-06
 - Persist highlight tap timestamps with session metadata.
 - Keep vocabulary configuration UI in Settings (multiline textarea, one term per line).
 - Keep vocabulary sync wiring (`create_vocabulary`/`update_vocabulary`).
-- Add build-time settings preload from `assets/ProjectContext.config.txt` with section-level hide/discard behavior.
+- Add build-time settings preload from `assets/ProjectContext.config.json` with section-level hide/discard behavior.
 
 ## Milestone 2: Post-Record Recognition Final Pass
 - Stage audio to COS after recording finalize.
@@ -45,7 +45,7 @@ Date: 2026-03-06
 - If file ASR fails, session remains usable with realtime fallback transcript and no fabricated speaker/timestamp tags.
 - User can set/update/clear vocabulary terms in Settings UI via multiline textarea (one term per line).
 - Vocabulary settings apply globally (no per-session override in v1).
-- Any section fully supplied in `assets/ProjectContext.config.txt` is hidden from Settings.
+- Any section fully supplied in `assets/ProjectContext.config.json` is hidden from Settings.
 - Incomplete config sections are discarded and fall back to editable Settings storage.
 - If all four sections are complete in config, Settings tab is hidden.
 - Each completed session has immediate fallback title, later replaced by LLM title when generation succeeds.
