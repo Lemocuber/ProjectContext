@@ -1,5 +1,17 @@
-import { useMemo, useRef, useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, ToastAndroid, View } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
+import { File } from 'expo-file-system';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  ToastAndroid,
+  View,
+} from 'react-native';
 import {
   FinalPassError,
   runDashScopeRecordedFinalPass,
@@ -40,6 +52,10 @@ type RecordScreenProps = {
   onHistoryUpdated?: () => void;
 };
 
+const AUTO_SCROLL_INACTIVITY_MS = 15_000;
+const AUTO_SCROLL_BOTTOM_THRESHOLD_PX = 56;
+const AUTO_SCROLL_THROTTLE_MS = 250;
+
 function inferFinalPassFailureReason(error: unknown): FinalPassFailureReason {
   if (error instanceof FinalPassError) return error.reason;
   if (error instanceof Error) {
@@ -58,6 +74,10 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
   const [errorText, setErrorText] = useState('');
   const [infoText, setInfoText] = useState('');
   const [highlightCount, setHighlightCount] = useState(0);
+  const [pendingFinalizeEvent, setPendingFinalizeEvent] = useState<
+    Extract<AsrEvent, { type: 'final' }> | null
+  >(null);
+  const [discardConfirmArmed, setDiscardConfirmArmed] = useState(false);
   const sessionRef = useRef<AsrSession | null>(null);
   const transcriptRef = useRef('');
   const startAtRef = useRef<string | null>(null);
@@ -67,13 +87,89 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
   const highlightTapsMsRef = useRef<number[]>([]);
   const appliedVocabularyIdRef = useRef<string | undefined>(undefined);
   const appliedVocabularyTermsRef = useRef<string[]>([]);
+  const transcriptScrollRef = useRef<ScrollView | null>(null);
+  const autoScrollEnabledRef = useRef(true);
+  const lastUserScrollAtRef = useRef(0);
+  const lastAutoScrollAtRef = useRef(0);
+  const scrollMetricsRef = useRef({
+    contentHeight: 0,
+    layoutHeight: 0,
+    offsetY: 0,
+  });
+  const programmaticScrollRef = useRef(false);
+  const programmaticScrollResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const isRecording = status === 'recording';
+  const hasPendingReview = !!pendingFinalizeEvent;
+  const isBusy = status === 'processing' || hasPendingReview;
+
+  const isNearBottom = () => {
+    const metrics = scrollMetricsRef.current;
+    const distanceToBottom = metrics.contentHeight - (metrics.offsetY + metrics.layoutHeight);
+    return distanceToBottom <= AUTO_SCROLL_BOTTOM_THRESHOLD_PX;
+  };
+
+  const scrollTranscriptToBottom = () => {
+    if (!transcriptScrollRef.current) return;
+    const now = Date.now();
+    if (now - lastAutoScrollAtRef.current < AUTO_SCROLL_THROTTLE_MS) return;
+    lastAutoScrollAtRef.current = now;
+    programmaticScrollRef.current = true;
+    if (programmaticScrollResetTimerRef.current) {
+      clearTimeout(programmaticScrollResetTimerRef.current);
+    }
+    programmaticScrollResetTimerRef.current = setTimeout(() => {
+      programmaticScrollRef.current = false;
+      programmaticScrollResetTimerRef.current = null;
+    }, 220);
+    transcriptScrollRef.current.scrollToEnd({ animated: true });
+  };
+
+  const maybeAutoScrollTranscript = () => {
+    if (!isRecording) return;
+    const inactiveMs = Date.now() - lastUserScrollAtRef.current;
+    if (
+      autoScrollEnabledRef.current ||
+      lastUserScrollAtRef.current === 0 ||
+      inactiveMs > AUTO_SCROLL_INACTIVITY_MS
+    ) {
+      autoScrollEnabledRef.current = true;
+      scrollTranscriptToBottom();
+    }
+  };
+
+  const handleTranscriptScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    scrollMetricsRef.current = {
+      contentHeight: contentSize.height,
+      layoutHeight: layoutMeasurement.height,
+      offsetY: contentOffset.y,
+    };
+    if (programmaticScrollRef.current) return;
+    lastUserScrollAtRef.current = Date.now();
+    autoScrollEnabledRef.current = isNearBottom();
+  };
+
+  useEffect(() => {
+    maybeAutoScrollTranscript();
+  }, [isRecording, transcriptText]);
+
+  useEffect(
+    () => () => {
+      if (programmaticScrollResetTimerRef.current) {
+        clearTimeout(programmaticScrollResetTimerRef.current);
+      }
+    },
+    [],
+  );
 
   const statusLabel = useMemo(() => {
+    if (pendingFinalizeEvent) return 'Review Needed';
     if (status === 'recording') return 'Recording';
     if (status === 'processing') return 'Stopping';
     if (status === 'failed') return 'Failed';
     return 'Idle';
-  }, [status]);
+  }, [pendingFinalizeEvent, status]);
 
   const persistSession = async (item: SessionHistoryItem) => {
     if (persistedRef.current) return;
@@ -275,7 +371,7 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
   };
 
   const start = async () => {
-    if (status === 'processing') return;
+    if (status === 'processing' || hasPendingReview) return;
 
     const apiKey = await loadEffectiveDashScopeApiKey();
     if (!apiKey) {
@@ -290,6 +386,8 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
     setErrorText('');
     setInfoText('');
     setHighlightCount(0);
+    setPendingFinalizeEvent(null);
+    setDiscardConfirmArmed(false);
     startAtRef.current = new Date().toISOString();
     startAtMsRef.current = Date.now();
     sessionIdRef.current = buildSessionId();
@@ -297,6 +395,14 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
     highlightTapsMsRef.current = [];
     appliedVocabularyIdRef.current = undefined;
     appliedVocabularyTermsRef.current = [];
+    autoScrollEnabledRef.current = true;
+    lastUserScrollAtRef.current = 0;
+    lastAutoScrollAtRef.current = 0;
+    scrollMetricsRef.current = {
+      contentHeight: 0,
+      layoutHeight: 0,
+      offsetY: 0,
+    };
 
     const vocabularySettings = await loadEffectiveVocabularySettings();
     const vocabularyId = vocabularySettings.syncStatus === 'failed' ? undefined : vocabularySettings.vocabularyId;
@@ -317,26 +423,10 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
           if (event.type === 'final') {
             transcriptRef.current = event.text;
             setTranscriptText(event.text);
-            setInfoText('Finalizing session...');
-            void (async () => {
-              let failed = false;
-              try {
-                await finalizeCompletedSession(event);
-              } catch (error) {
-                failed = true;
-                const message =
-                  error instanceof Error ? error.message : 'Failed to finalize session.';
-                setErrorText(message);
-                setStatus('failed');
-                await persistFailedSession({
-                  message,
-                  audioFileUri: event.audioFileUri,
-                });
-              } finally {
-                setInfoText('');
-                if (!failed) setStatus('idle');
-              }
-            })();
+            setPendingFinalizeEvent(event);
+            setDiscardConfirmArmed(false);
+            setStatus('idle');
+            setInfoText('Review recording: discard or continue.');
           }
           if (event.type === 'status') {
             setInfoText(event.message);
@@ -384,9 +474,78 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
     setHighlightCount(highlightTapsMsRef.current.length);
   };
 
-  const isRecording = status === 'recording';
-  const isBusy = status === 'processing';
-  const recordButtonText = isRecording ? 'Stop' : 'Start Recording';
+  const continueFinalize = async () => {
+    if (!pendingFinalizeEvent) return;
+    const event = pendingFinalizeEvent;
+    setPendingFinalizeEvent(null);
+    setDiscardConfirmArmed(false);
+    setStatus('processing');
+    setErrorText('');
+    setInfoText('Finalizing session...');
+
+    let failed = false;
+    try {
+      await finalizeCompletedSession(event);
+    } catch (error) {
+      failed = true;
+      const message = error instanceof Error ? error.message : 'Failed to finalize session.';
+      setErrorText(message);
+      setStatus('failed');
+      await persistFailedSession({
+        message,
+        audioFileUri: event.audioFileUri,
+      });
+    } finally {
+      setInfoText('');
+      if (!failed) {
+        setStatus('idle');
+      }
+    }
+  };
+
+  const discardRecording = async () => {
+    if (!pendingFinalizeEvent) return;
+    if (!discardConfirmArmed) {
+      setDiscardConfirmArmed(true);
+      setInfoText('Tap discard again to confirm.');
+      return;
+    }
+
+    if (pendingFinalizeEvent.audioFileUri) {
+      try {
+        const file = new File(pendingFinalizeEvent.audioFileUri);
+        if (file.exists) {
+          file.delete();
+        }
+      } catch {
+        // Best effort cleanup of local recording artifact.
+      }
+    }
+
+    setPendingFinalizeEvent(null);
+    setDiscardConfirmArmed(false);
+    setStatus('idle');
+    setTranscriptText('');
+    transcriptRef.current = '';
+    setHighlightCount(0);
+    setErrorText('');
+    setInfoText('Recording discarded.');
+    startAtRef.current = null;
+    startAtMsRef.current = 0;
+    sessionIdRef.current = '';
+    persistedRef.current = false;
+    highlightTapsMsRef.current = [];
+    appliedVocabularyIdRef.current = undefined;
+    appliedVocabularyTermsRef.current = [];
+    autoScrollEnabledRef.current = true;
+    lastUserScrollAtRef.current = 0;
+    lastAutoScrollAtRef.current = 0;
+    scrollMetricsRef.current = {
+      contentHeight: 0,
+      layoutHeight: 0,
+      offsetY: 0,
+    };
+  };
 
   return (
     <View style={styles.layout}>
@@ -400,25 +559,64 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
         style={({ pressed }) => [
           styles.recordButton,
           isBusy ? styles.recordButtonDisabled : null,
-          pressed && isRecording ? styles.recordButtonPressed : null,
+          pressed && !isBusy ? styles.recordButtonPressed : null,
         ]}
       >
-        <Text style={styles.recordButtonText}>{recordButtonText}</Text>
+        <MaterialIcons
+          color="#fff"
+          name={isRecording ? 'stop' : 'play-arrow'}
+          size={isRecording ? 72 : 86}
+        />
       </Pressable>
 
-      <Pressable
-        disabled={!isRecording}
-        onPress={markHighlight}
-        style={[styles.highlightButton, !isRecording ? styles.highlightButtonDisabled : null]}
-      >
-        <Text style={styles.highlightButtonText}>Mark Highlight</Text>
-      </Pressable>
+      {hasPendingReview ? (
+        <View style={styles.postRecordActionsRow}>
+          <Pressable
+            onPress={discardRecording}
+            style={[
+              styles.postRecordDiscardButton,
+              discardConfirmArmed ? styles.postRecordDiscardButtonArmed : null,
+            ]}
+          >
+            <MaterialIcons
+              color={discardConfirmArmed ? '#9D1A1A' : colors.muted}
+              name={discardConfirmArmed ? 'help-outline' : 'delete-outline'}
+              size={22}
+            />
+          </Pressable>
+          <Pressable onPress={continueFinalize} style={styles.postRecordContinueButton}>
+            <MaterialIcons color="#fff" name="check" size={26} />
+          </Pressable>
+        </View>
+      ) : (
+        <Pressable
+          disabled={!isRecording}
+          onPress={markHighlight}
+          style={[styles.highlightButton, !isRecording ? styles.highlightButtonDisabled : null]}
+        >
+          <Text style={styles.highlightButtonText}>Mark Highlight</Text>
+        </Pressable>
+      )}
       <Text style={styles.highlightCountText}>Highlights: {highlightCount}</Text>
 
       {errorText ? <Text style={styles.errorText}>{errorText}</Text> : null}
       {infoText ? <Text style={styles.infoText}>{infoText}</Text> : null}
 
-      <ScrollView contentContainerStyle={styles.transcriptWrap} style={styles.transcriptPanel}>
+      <ScrollView
+        contentContainerStyle={styles.transcriptWrap}
+        onContentSizeChange={(_, contentHeight) => {
+          scrollMetricsRef.current.contentHeight = contentHeight;
+          maybeAutoScrollTranscript();
+        }}
+        onLayout={(event) => {
+          scrollMetricsRef.current.layoutHeight = event.nativeEvent.layout.height;
+          maybeAutoScrollTranscript();
+        }}
+        onScroll={handleTranscriptScroll}
+        ref={transcriptScrollRef}
+        scrollEventThrottle={100}
+        style={styles.transcriptPanel}
+      >
         <Text style={styles.sectionTitle}>Transcript</Text>
         <Text style={styles.transcriptText}>{transcriptText || 'Start recording to capture transcript.'}</Text>
       </ScrollView>
@@ -466,12 +664,6 @@ const styles = StyleSheet.create({
   recordButtonDisabled: {
     backgroundColor: '#CCB6AE',
   },
-  recordButtonText: {
-    color: '#fff',
-    fontSize: 24,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
   highlightButton: {
     alignItems: 'center',
     alignSelf: 'center',
@@ -487,6 +679,34 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     fontWeight: '700',
+  },
+  postRecordActionsRow: {
+    alignSelf: 'center',
+    flexDirection: 'row',
+    gap: 10,
+    width: 242,
+  },
+  postRecordDiscardButton: {
+    alignItems: 'center',
+    backgroundColor: '#ECE7DD',
+    borderColor: colors.border,
+    borderRadius: 10,
+    borderWidth: 1,
+    height: 42,
+    justifyContent: 'center',
+    width: 76,
+  },
+  postRecordDiscardButtonArmed: {
+    backgroundColor: '#F7E6E0',
+    borderColor: '#D9A79A',
+  },
+  postRecordContinueButton: {
+    alignItems: 'center',
+    backgroundColor: colors.accent,
+    borderRadius: 10,
+    flex: 1,
+    height: 42,
+    justifyContent: 'center',
   },
   highlightCountText: {
     color: colors.muted,

@@ -49,9 +49,17 @@ V1 code was migrated to the corrected architecture where final transcript metada
 - Changed completed-session transcript persistence so History displays the same markdown content as the exported transcript artifact.
 - Moved markdown auto-export to run after final-pass completion and title-generation attempt, so exported filenames/content use the final chosen title.
 - Updated filename sanitization to blacklist-only filtering so non-Latin titles are preserved.
+- Updated record-screen controls and review UX:
+  - replaced start/stop text with icon-only record control,
+  - changed post-stop flow to explicit split decision (`discard` or `continue`) before final-pass processing,
+  - added two-tap confirmation arming for discard action.
+- Added transcript auto-scroll behavior for active recording:
+  - auto-scroll only when near bottom,
+  - pause on user scroll-away,
+  - resume automatically after >15s user scroll inactivity.
 
 ## Validation Snapshot
-- `npm run typecheck` in `mobile/`: passed after migration.
+- `npm run typecheck` in `mobile/`: passed after record-screen UI tweak pass.
 - Manual Android phone validation and CI/APK gates: pending.
 
 ## Current Status

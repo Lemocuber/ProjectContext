@@ -17,7 +17,10 @@ Extend v0 capture into a review-and-export workflow with a strict two-stage tran
 - Build-time default settings asset (`mobile/assets/config.json`) with section-level preload/discard behavior.
 - Persist raw realtime transcript (unprocessed) with the session.
 - Highlight marking during recording (single tap, timestamped as `tapMs`).
-- After stop/finalize, run file ASR recognition on recorded audio.
+- After stop, require an explicit post-record decision:
+  - discard recording (two-tap confirmation),
+  - continue to finalize (existing pipeline).
+- Run file ASR recognition only after explicit continue on the post-record decision state.
 - Build finalized sentence structure (timestamps + optional speaker labels) from file ASR results.
 - Anchor highlights to finalized sentence lines using file ASR timestamps.
 - Generate markdown transcript from finalized sentence structure.
@@ -45,8 +48,17 @@ Extend v0 capture into a review-and-export workflow with a strict two-stage tran
 - Web/iOS parity.
 
 ## UX Requirements
-- Record flow remains primary; highlight action is single tap while recording.
+- Record flow remains primary; record control uses start/stop icons.
+- Highlight action is single tap while recording.
+- After stop, replace highlight action area with split post-record controls:
+  - left secondary discard icon button (narrower),
+  - right primary continue icon button (wider).
+- Discard requires two taps:
+  - first tap arms confirmation and switches icon to an "are you sure" state,
+  - second tap confirms discard.
 - Live transcript surface is clean text only (no timestamps, speaker labels, or highlight tags).
+- While recording, transcript view auto-scrolls to bottom when user is near bottom.
+- If user scrolls away from bottom, auto-scroll pauses and resumes automatically after >15s scroll inactivity.
 - Finalization flow includes a visible "post-record recognition" step before finalized markdown is marked complete.
 - History/detail view surfaces:
   - finalized transcript content when file ASR succeeds,

@@ -85,22 +85,48 @@ Date: 2026-03-06
 1. Start recording and realtime ASR stream for live transcript UX.
 2. Capture highlight taps as `tapMs` while recording.
 3. Persist rolling raw realtime transcript content for fallback.
-4. On stop/finalize, persist audio artifact.
-5. Stage recorded audio to COS (zero-backend BYOK upload mode).
-6. Resolve a publicly fetchable HTTPS URL for file ASR (prefer signed URL).
-7. Submit file ASR recognition task for the staged audio URL.
-8. Poll/query recognition task until terminal state.
-9. If file ASR succeeds:
+4. On stop, persist audio artifact and enter post-record review state.
+5. Post-record review actions:
+  - discard (requires two-tap confirmation before delete/reset),
+  - continue (starts existing finalize pipeline).
+6. Stage recorded audio to COS (zero-backend BYOK upload mode).
+7. Resolve a publicly fetchable HTTPS URL for file ASR (prefer signed URL).
+8. Submit file ASR recognition task for the staged audio URL.
+9. Poll/query recognition task until terminal state.
+10. If file ASR succeeds:
   - parse sentence timestamps/speakers from result,
   - anchor highlight taps to finalized sentences,
   - generate markdown transcript artifact from finalized sentences.
-10. If file ASR fails/times out:
+11. If file ASR fails/times out:
   - mark `finalPassStatus="failed"`,
   - set `finalPassFailureReason`,
   - keep `realtimeTranscriptRaw` as session fallback transcript,
   - skip speaker/timestamp enrichment.
-11. Trigger title generation and markdown export using best available transcript artifact.
-12. Persist title updates and export statuses for history/detail rendering.
+12. Trigger title generation and markdown export using best available transcript artifact.
+13. Persist title updates and export statuses for history/detail rendering.
+
+## Record Screen Controls
+- Primary record button uses icon-only states:
+  - idle: start icon,
+  - recording: stop icon.
+- While recording:
+  - show highlight button,
+  - transcript panel supports conditional auto-scroll to bottom.
+- After stop (pending review):
+  - replace highlight button area with split action row,
+  - left action: discard icon button, secondary style, narrower width,
+  - right action: continue icon button, primary style, wider width.
+- Discard requires two taps in pending review state:
+  - first tap arms discard confirmation and swaps icon to an explicit confirmation icon,
+  - second tap confirms discard and resets in-memory draft session state.
+
+## Transcript Auto-Scroll Rule
+- Auto-scroll applies only while `status=recording`.
+- If user is near the bottom of transcript, incoming transcript updates scroll to bottom.
+- If user scrolls away from bottom, auto-scroll pauses to avoid fighting user scroll.
+- Auto-scroll resumes when either:
+  - user scrolls back near bottom, or
+  - user has >15 seconds of scroll inactivity during recording.
 
 ## Zero-Backend COS BYOK Mode (Locked)
 - v1 supports a zero-backend storage staging mode via Tencent COS.
