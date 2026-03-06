@@ -3,58 +3,45 @@
 Date: 2026-03-06
 
 ## Summary
-A major architecture correction was identified in v1.
-- Previous implementation used realtime ASR metadata for finalized sentence timestamps/speakers.
-- Realtime ASR does not satisfy v1 diarization requirements.
-- V1 must switch to post-record file ASR final pass for finalized transcript metadata.
+V1 code was migrated to the corrected architecture where final transcript metadata is produced only from post-record file ASR.
 
-Result: previous "implementation complete" status is no longer valid for v1 acceptance.
+## Implemented In This Pass
+- Session model/storage updates:
+  - added `realtimeTranscriptRaw` fallback field,
+  - added final-pass metadata fields (`finalPassStatus`, `finalPassTaskId`, `finalPassFailureReason`, `sourceAudioRemoteUrl`, `sourceAudioObjectKey`).
+- Settings updates:
+  - added Tencent COS BYOK configuration UI and secure persistence (`bucket/region/credentials/prefix/url-expiry/timeout/cleanup`).
+- Realtime ASR handoff updates:
+  - realtime session final event now returns transcript + audio only,
+  - realtime sentence timing/speaker output is no longer consumed as finalized metadata.
+- Zero-backend staging and final pass:
+  - added COS signing utilities,
+  - added audio upload to COS with signed URL generation,
+  - added optional best-effort staged object cleanup,
+  - added DashScope recorded-recognition submit + poll + transcription fetch.
+- Final transcript assembly:
+  - parse sentence timing/speaker labels from file-ASR output,
+  - anchor highlight taps only after successful file ASR,
+  - fallback safely to raw realtime transcript when final pass fails/timeouts.
+- Markdown/title/export flow updates:
+  - success markdown path uses sentence-level timestamp/speaker/highlight markers,
+  - fallback markdown path writes plain transcript lines without synthetic timestamp/speaker tags,
+  - title generation uses best available transcript source.
+- History/detail updates:
+  - surfaced final-pass status and failure reason in session details.
 
-## Still Valid From Prior Implementation
-- Recording flow:
-  - highlight button during active recording,
-  - `tapMs` capture and persistence,
-  - live transcript remains clean (no timestamps/speaker/highlight tags).
-- Title generation:
-  - fallback title at finalize (`Record YY-MM-DD hh:mm`),
-  - async DeepSeek title generation and persisted replacement path,
-  - failure-safe behavior (fallback retained, `titleStatus=failed`).
-- Export:
-  - markdown auto-export to Android `Downloads`,
-  - manual markdown export in history/detail,
-  - manual audio export in history/detail,
-  - SAF directory permission caching and re-request fallback.
-- Settings:
-  - DashScope and DeepSeek BYOK key paths,
-  - vocabulary textarea (one term per line),
-  - vocabulary validation/sync/update/clear behavior.
-- Storage baseline:
-  - v1 schema (`session_history_v2`),
-  - persisted export metadata and title status.
-
-## Invalidated/Needs Rework
-- Finalized sentence construction from realtime `sentence_end=true`.
-- Timestamp extraction from realtime payload.
-- Any speaker-label derivation from realtime payload fields.
-- Highlight anchoring that depends on realtime-derived sentence timing.
-- Any claim that v1 transcript metadata correctness is complete.
-
-## Required Rework for V1 Acceptance
-- Persist raw realtime transcript as unprocessed fallback artifact.
-- Add post-record file ASR submission and async task polling.
-- Build finalized sentence list (timestamps/speakers) from file ASR result only.
-- Anchor highlights using file ASR sentence timing.
-- Add explicit final-pass status handling (`pending/completed/failed`).
-- Ensure markdown generation supports:
-  - success path (file ASR enriched transcript),
-  - fallback path (raw realtime transcript without fake speaker/timestamp tags).
-- Re-run manual Android validation and CI/APK gates after rework.
+## Root Cause Coverage
+- Root cause: finalized transcript metadata previously came from realtime ASR, which is insufficient for diarization.
+- Follow-through checks:
+  - removed finalized metadata consumption from realtime event shape,
+  - moved finalized sentence derivation to recorded/file ASR service path,
+  - updated markdown generation to avoid fabricated metadata in fallback mode.
 
 ## Validation Snapshot
-- `npm run typecheck` in `mobile/`: passed (latest local run).
-- End-to-end v1 acceptance: blocked until file-ASR final-pass rework is implemented and validated.
+- `npm run typecheck` in `mobile/`: passed after migration.
+- Manual Android phone validation and CI/APK gates: pending.
 
 ## Current Status
-- Spec/docs: corrected to file-ASR final-pass model.
-- Code: partially aligned, rework required.
-- Release readiness: not ready.
+- Spec/docs: aligned to file-ASR final-pass model.
+- Code: migrated to final-pass architecture.
+- Release readiness: pending manual E2E validation and CI/APK gate confirmation.

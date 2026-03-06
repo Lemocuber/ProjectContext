@@ -1,13 +1,17 @@
 import { useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, ToastAndroid, View } from 'react-native';
+import {
+  FinalPassError,
+  runDashScopeRecordedFinalPass,
+} from '../services/asr/dashscopeRecordedRecognition';
 import { dashscopeRealtimeSessionService } from '../services/asr/dashscopeRealtimeSession';
 import type { AsrSession, RecordingStatus } from '../services/asr/types';
+import { cleanupCosObjectBestEffort, stageAudioToCos } from '../services/cos/cosStagingService';
 import { exportTextToDownloads } from '../services/export/downloadsExportService';
 import {
   anchorHighlightTaps,
   buildFallbackTitle,
   collectHighlightTexts,
-  ensureFinalizedSentences,
 } from '../services/session/sessionFormatting';
 import { generateSessionTitle } from '../services/title/deepseekTitleService';
 import {
@@ -17,6 +21,11 @@ import {
   saveTranscriptMarkdown,
 } from '../services/transcript/transcriptMarkdown';
 import { loadApiKey } from '../storage/apiKeyStore';
+import {
+  hasCompleteCosSettings,
+  isCosCredentialLikelyExpired,
+  loadCosSettings,
+} from '../storage/cosSettingsStore';
 import { loadDeepSeekApiKey } from '../storage/deepseekKeyStore';
 import {
   appendSessionHistory,
@@ -24,12 +33,25 @@ import {
 } from '../storage/sessionHistoryStore';
 import { loadVocabularySettings } from '../storage/vocabularySettingsStore';
 import type { AsrEvent } from '../services/asr/types';
+import type { FinalPassFailureReason, FinalizedSentence } from '../types/session';
 import type { SessionHistoryItem } from '../types/session';
 import { colors } from '../theme';
 
 type RecordScreenProps = {
   onHistoryUpdated?: () => void;
 };
+
+function inferFinalPassFailureReason(error: unknown): FinalPassFailureReason {
+  if (error instanceof FinalPassError) return error.reason;
+  if (error instanceof Error) {
+    const lower = error.message.toLowerCase();
+    if (lower.includes('expire') || lower.includes('403') || lower.includes('url')) {
+      return 'url_expired';
+    }
+    if (lower.includes('upload')) return 'upload_failed';
+  }
+  return 'unknown';
+}
 
 export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
   const [status, setStatus] = useState<RecordingStatus>('idle');
@@ -74,6 +96,7 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
       endedAt,
       status: 'failed',
       transcript: transcriptRef.current,
+      realtimeTranscriptRaw: transcriptRef.current,
       errorText: params.message,
       audioFileUri: params.audioFileUri ?? undefined,
       fallbackTitle,
@@ -97,18 +120,106 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
     const startedAt = startAtRef.current;
     const endedAt = new Date().toISOString();
     const fallbackTitle = buildFallbackTitle(startedAt);
-    const finalizedSentences = anchorHighlightTaps(
-      ensureFinalizedSentences(event.finalizedSentences, event.text),
-      highlightTapsMsRef.current,
-    );
+    const deepSeekApiKey = (await loadDeepSeekApiKey())?.trim() || '';
+    const hasDeepSeekKey = !!deepSeekApiKey;
+    const realtimeTranscriptRaw = event.text.trim();
+    const cosSettings = await loadCosSettings();
+    const cosConfigured = hasCompleteCosSettings(cosSettings);
+    const cosLikelyExpired = isCosCredentialLikelyExpired(cosSettings.credentialExpiresAt);
+    const canRunFinalPass = !!event.audioFileUri && cosConfigured && !cosLikelyExpired;
 
-    const fallbackMarkdown = buildTranscriptMarkdown({
+    let finalPassStatus: 'pending' | 'completed' | 'failed' = canRunFinalPass ? 'pending' : 'failed';
+    let finalPassFailureReason: FinalPassFailureReason | undefined;
+    if (!canRunFinalPass) {
+      finalPassFailureReason = !event.audioFileUri
+        ? 'upload_failed'
+        : cosLikelyExpired
+          ? 'url_expired'
+          : 'unknown';
+    }
+    let finalPassTaskId: string | undefined;
+    let sourceAudioRemoteUrl: string | undefined;
+    let sourceAudioObjectKey: string | undefined;
+    let finalizedSentences: FinalizedSentence[] = [];
+    let bestTranscriptText = realtimeTranscriptRaw;
+
+    await persistSession({
+      id: sessionIdRef.current,
+      startedAt,
+      endedAt,
+      status: 'completed',
+      transcript: realtimeTranscriptRaw,
+      realtimeTranscriptRaw,
+      fallbackTitle,
+      highlightTapsMs: [...highlightTapsMsRef.current],
+      finalizedSentences: [],
+      finalPassStatus,
+      finalPassFailureReason,
+      audioFileUri: event.audioFileUri ?? undefined,
+      appliedVocabularyId: appliedVocabularyIdRef.current,
+      appliedVocabularyTerms: [...appliedVocabularyTermsRef.current],
+      titleStatus: hasDeepSeekKey ? 'pending' : 'failed',
+    });
+    if (canRunFinalPass && event.audioFileUri) {
+      try {
+        setInfoText('Uploading audio for final-pass recognition...');
+        const stagedAudio = await stageAudioToCos({
+          settings: cosSettings,
+          sessionId: sessionIdRef.current,
+          startedAt,
+          audioFileUri: event.audioFileUri,
+        });
+        sourceAudioRemoteUrl = stagedAudio.sourceAudioRemoteUrl;
+        sourceAudioObjectKey = stagedAudio.objectKey;
+        await updateSessionHistoryItem(sessionIdRef.current, (item) => ({
+          ...item,
+          sourceAudioRemoteUrl,
+          sourceAudioObjectKey,
+        }));
+        onHistoryUpdated?.();
+
+        const finalPassResult = await runDashScopeRecordedFinalPass({
+          apiKey: (await loadApiKey()) || '',
+          sourceAudioRemoteUrl,
+          timeoutMs: cosSettings.finalPassTimeoutMs,
+          vocabularyId: appliedVocabularyIdRef.current,
+          onStatus: (message) => setInfoText(message),
+        });
+
+        finalPassTaskId = finalPassResult.taskId;
+        finalizedSentences = anchorHighlightTaps(
+          finalPassResult.finalizedSentences,
+          highlightTapsMsRef.current,
+        );
+        bestTranscriptText =
+          finalPassResult.transcriptText.trim() ||
+          finalizedSentences.map((sentence) => sentence.text).join(' ').trim() ||
+          realtimeTranscriptRaw;
+        finalPassStatus = 'completed';
+        finalPassFailureReason = undefined;
+      } catch (error) {
+        finalPassStatus = 'failed';
+        finalPassFailureReason = inferFinalPassFailureReason(error);
+        finalizedSentences = [];
+        bestTranscriptText = realtimeTranscriptRaw;
+      } finally {
+        if (cosSettings.cleanupEnabled) {
+          await cleanupCosObjectBestEffort({
+            settings: cosSettings,
+            objectKey: sourceAudioObjectKey,
+          });
+        }
+      }
+    }
+
+    const markdown = buildTranscriptMarkdown({
       title: fallbackTitle,
       startedAt,
       endedAt,
-      sentences: finalizedSentences,
+      sentences: finalPassStatus === 'completed' ? finalizedSentences : undefined,
+      fallbackTranscript: finalPassStatus === 'completed' ? undefined : realtimeTranscriptRaw,
     });
-    const transcriptMarkdownUri = saveTranscriptMarkdown(sessionIdRef.current, fallbackMarkdown);
+    const transcriptMarkdownUri = saveTranscriptMarkdown(sessionIdRef.current, markdown);
     const markdownFileName = buildMarkdownFileName(startedAt, fallbackTitle);
 
     let markdownAutoExportStatus: 'completed' | 'failed' = 'failed';
@@ -116,7 +227,7 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
     try {
       markdownLastPath = await exportTextToDownloads({
         fileName: markdownFileName,
-        content: fallbackMarkdown,
+        content: markdown,
       });
       markdownAutoExportStatus = 'completed';
       toast('Markdown exported to Downloads.');
@@ -125,36 +236,40 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
       toast(message);
     }
 
-    const deepSeekApiKey = (await loadDeepSeekApiKey())?.trim() || '';
-    const hasDeepSeekKey = !!deepSeekApiKey;
-    const titleStatus = hasDeepSeekKey ? 'pending' : 'failed';
-    await persistSession({
-      id: sessionIdRef.current,
-      startedAt,
-      endedAt,
-      status: 'completed',
-      transcript: event.text,
-      fallbackTitle,
-      highlightTapsMs: [...highlightTapsMsRef.current],
-      finalizedSentences,
-      audioFileUri: event.audioFileUri ?? undefined,
-      appliedVocabularyId: appliedVocabularyIdRef.current,
-      appliedVocabularyTerms: [...appliedVocabularyTermsRef.current],
-      titleStatus,
+    await updateSessionHistoryItem(sessionIdRef.current, (item) => ({
+      ...item,
+      transcript: bestTranscriptText,
+      finalizedSentences: finalPassStatus === 'completed' ? finalizedSentences : [],
+      finalPassStatus,
+      finalPassTaskId,
+      finalPassFailureReason,
+      sourceAudioRemoteUrl,
+      sourceAudioObjectKey,
       transcriptMarkdownUri,
       exportMetadata: {
+        ...item.exportMetadata,
         markdownAutoExportStatus,
         markdownExportedAt: markdownAutoExportStatus === 'completed' ? new Date().toISOString() : undefined,
         markdownLastPath,
       },
-    });
+    }));
+    onHistoryUpdated?.();
 
-    if (!hasDeepSeekKey || !event.text.trim()) return;
+    if (!hasDeepSeekKey || !bestTranscriptText.trim()) {
+      if (hasDeepSeekKey) {
+        await updateSessionHistoryItem(sessionIdRef.current, (item) => ({
+          ...item,
+          titleStatus: 'failed',
+        }));
+        onHistoryUpdated?.();
+      }
+      return;
+    }
 
     try {
       const title = await generateSessionTitle({
         apiKey: deepSeekApiKey,
-        transcript: event.text,
+        transcript: bestTranscriptText,
         highlights: collectHighlightTexts(finalizedSentences),
       });
 
@@ -162,7 +277,8 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
         title,
         startedAt,
         endedAt,
-        sentences: finalizedSentences,
+        sentences: finalPassStatus === 'completed' ? finalizedSentences : undefined,
+        fallbackTranscript: finalPassStatus === 'completed' ? undefined : realtimeTranscriptRaw,
       });
       overwriteTranscriptMarkdown(transcriptMarkdownUri, nextMarkdown);
 

@@ -294,7 +294,6 @@ export const dashscopeRealtimeSessionService: AsrSessionService = {
         type: 'final',
         text: joinTranscript(finalizedSentences, partialSentence),
         audioFileUri: persistAudioOnce(),
-        finalizedSentences: [...finalizedSentences],
       });
     };
 

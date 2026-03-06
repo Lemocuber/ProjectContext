@@ -23,7 +23,7 @@
 - Add in-session highlight action during recording.
 - Persist highlight timestamps per session.
 - Persist unprocessed realtime transcript copy as fallback artifact.
-- Status: partially implemented (highlight capture exists); fallback persistence path needs explicit lock-in/validation.
+- Status: implemented in code; pending manual validation.
 
 ### 4) Workstream B: Post-Record Recognition + Vocabulary (v1)
 - Add COS staging path (BYOK upload) for recorded audio.
@@ -32,7 +32,7 @@
 - Expose vocabulary configuration UI in Settings (multiline textarea, one term per line).
 - Sync textarea terms to customization API (`create_vocabulary`/`update_vocabulary`) and apply internal `vocabulary_id` to recognition requests.
 - Persist speaker-attributed transcript and vocabulary metadata in history item.
-- Status: vocabulary settings implemented; final-pass recognition wiring pending rework.
+- Status: implemented in code (COS staging + file ASR submit/poll/parse + status persistence); pending manual validation.
 
 ### 5) Workstream C: Transcript Artifact and Title (v1)
 - Generate finalized markdown transcript from post-record file ASR sentence results.
@@ -40,14 +40,14 @@
 - Generate one concise session title from finalized transcript + highlights.
 - Apply fallback title immediately and replace with LLM title on completion.
 - Persist markdown URI, title, and generation status.
-- Status: partially implemented; transcript source must switch to final-pass output.
+- Status: implemented in code (success/fallback markdown modes + best-source title generation); pending manual validation.
 
 ### 6) Workstream D: Export Features (v1)
 - Auto-export markdown to `Downloads` after each finalized session.
 - Add manual markdown export action from history/detail.
 - Add manual audio export action from history/detail.
 - Ensure export works for completed sessions even after app restart.
-- Status: mostly implemented; validate behavior with both final-pass success and fallback transcript sessions.
+- Status: implemented and carried forward; validate behavior with both final-pass success and fallback transcript sessions.
 
 ## Validation Gates
 - Typecheck and CI pass.
@@ -67,7 +67,7 @@
   - finalized markdown format matches spec (header/time range/separator/sentence lines)
   - markdown auto-export succeeds
   - manual markdown and audio export both succeed
-- Gate target: in progress (architecture correction accepted; code rework + validation pending).
+- Gate target: in progress (code rework completed; manual validation + CI/APK confirmation pending).
 
 ## References
 - `docs/v1/delivery-plan.md`

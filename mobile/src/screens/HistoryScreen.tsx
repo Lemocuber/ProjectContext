@@ -373,6 +373,12 @@ export function HistoryScreen({ refreshToken }: HistoryScreenProps) {
                   {formatSessionRange(selectedItem.startedAt, selectedItem.endedAt)}
                 </Text>
                 <Text style={styles.detailMeta}>Status: {selectedItem.status}</Text>
+                <Text style={styles.detailMeta}>Final pass: {selectedItem.finalPassStatus || 'n/a'}</Text>
+                {selectedItem.finalPassFailureReason ? (
+                  <Text style={styles.detailMeta}>
+                    Final-pass failure: {selectedItem.finalPassFailureReason}
+                  </Text>
+                ) : null}
                 <Text style={styles.detailMeta}>Title status: {selectedItem.titleStatus || 'n/a'}</Text>
                 {selectedItem.exportMetadata?.markdownAutoExportStatus ? (
                   <Text style={styles.detailMeta}>

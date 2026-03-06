@@ -29,6 +29,16 @@ import {
   saveVocabularySettings,
   type VocabularySyncStatus,
 } from '../storage/vocabularySettingsStore';
+import {
+  clearCosSettings,
+  hasCompleteCosSettings,
+  loadCosSettings,
+  looksLikeCosBucket,
+  looksLikeCosRegion,
+  normalizeCosSettings,
+  saveCosSettings,
+  type CosSettings,
+} from '../storage/cosSettingsStore';
 import { colors } from '../theme';
 
 export function SettingsScreen() {
@@ -42,13 +52,24 @@ export function SettingsScreen() {
   const [vocabularyError, setVocabularyError] = useState('');
   const [vocabularyCount, setVocabularyCount] = useState(0);
   const [vocabularyBusy, setVocabularyBusy] = useState(false);
+  const [cosBucket, setCosBucket] = useState('');
+  const [cosRegion, setCosRegion] = useState('');
+  const [cosSecretId, setCosSecretId] = useState('');
+  const [cosSecretKey, setCosSecretKey] = useState('');
+  const [cosSessionToken, setCosSessionToken] = useState('');
+  const [cosCredentialExpiresAt, setCosCredentialExpiresAt] = useState('');
+  const [cosKeyPrefix, setCosKeyPrefix] = useState('');
+  const [cosSignedUrlExpiresSec, setCosSignedUrlExpiresSec] = useState('7200');
+  const [cosFinalPassTimeoutMs, setCosFinalPassTimeoutMs] = useState('1800000');
+  const [cosCleanupEnabled, setCosCleanupEnabled] = useState(true);
 
   useEffect(() => {
     void (async () => {
-      const [dashScopeKey, deepSeekKey, vocabularySettings] = await Promise.all([
+      const [dashScopeKey, deepSeekKey, vocabularySettings, cosSettings] = await Promise.all([
         loadApiKey(),
         loadDeepSeekApiKey(),
         loadVocabularySettings(),
+        loadCosSettings(),
       ]);
 
       if (dashScopeKey) setSavedMask(maskApiKey(dashScopeKey));
@@ -58,8 +79,22 @@ export function SettingsScreen() {
       setVocabularyId(vocabularySettings.vocabularyId);
       setVocabularySyncStatus(vocabularySettings.syncStatus || 'idle');
       setVocabularyCount(vocabularySettings.terms.length);
+      hydrateCosSettings(cosSettings);
     })();
   }, []);
+
+  const hydrateCosSettings = (settings: CosSettings) => {
+    setCosBucket(settings.cosBucket);
+    setCosRegion(settings.cosRegion);
+    setCosSecretId(settings.secretId);
+    setCosSecretKey(settings.secretKey);
+    setCosSessionToken(settings.sessionToken || '');
+    setCosCredentialExpiresAt(settings.credentialExpiresAt || '');
+    setCosKeyPrefix(settings.cosKeyPrefix || '');
+    setCosSignedUrlExpiresSec(String(settings.signedUrlExpiresSec));
+    setCosFinalPassTimeoutMs(String(settings.finalPassTimeoutMs));
+    setCosCleanupEnabled(settings.cleanupEnabled);
+  };
 
   const onSave = async () => {
     if (!looksLikeDashScopeApiKey(apiKey)) {
@@ -175,6 +210,48 @@ export function SettingsScreen() {
     }
   };
 
+  const onSaveCos = async () => {
+    const normalized = normalizeCosSettings({
+      cosBucket,
+      cosRegion,
+      secretId: cosSecretId,
+      secretKey: cosSecretKey,
+      sessionToken: cosSessionToken,
+      credentialExpiresAt: cosCredentialExpiresAt,
+      cosKeyPrefix,
+      signedUrlExpiresSec: Number(cosSignedUrlExpiresSec),
+      finalPassTimeoutMs: Number(cosFinalPassTimeoutMs),
+      cleanupEnabled: cosCleanupEnabled,
+    });
+
+    if (!looksLikeCosBucket(normalized.cosBucket)) {
+      Alert.alert('Invalid COS bucket', 'Use BucketName-APPID format, e.g. my-bucket-1250000000.');
+      return;
+    }
+    if (!looksLikeCosRegion(normalized.cosRegion)) {
+      Alert.alert('Invalid COS region', 'Use a region like ap-beijing.');
+      return;
+    }
+    if (!normalized.secretId || !normalized.secretKey) {
+      Alert.alert('Missing credentials', 'COS SecretId and SecretKey are required.');
+      return;
+    }
+    if (!hasCompleteCosSettings(normalized)) {
+      Alert.alert('Invalid config', 'Credential expiry is invalid or already expired.');
+      return;
+    }
+
+    await saveCosSettings(normalized);
+    hydrateCosSettings(normalized);
+    Alert.alert('Saved', 'COS settings saved for post-record file ASR.');
+  };
+
+  const onClearCos = async () => {
+    await clearCosSettings();
+    hydrateCosSettings(await loadCosSettings());
+    Alert.alert('Cleared', 'COS settings removed.');
+  };
+
   return (
     <ScrollView contentContainerStyle={styles.layout}>
       <View style={styles.card}>
@@ -233,6 +310,113 @@ export function SettingsScreen() {
         </View>
 
         <Text style={styles.savedLabel}>Saved key: {savedDeepSeekMask || 'Not set'}</Text>
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.title}>Tencent COS (BYOK)</Text>
+        <Text style={styles.description}>
+          Used to stage audio for file ASR final-pass in zero-backend mode.
+        </Text>
+
+        <TextInput
+          autoCapitalize="none"
+          autoCorrect={false}
+          onChangeText={setCosBucket}
+          placeholder="bucket-name-1250000000"
+          placeholderTextColor={colors.muted}
+          style={styles.input}
+          value={cosBucket}
+        />
+        <TextInput
+          autoCapitalize="none"
+          autoCorrect={false}
+          onChangeText={setCosRegion}
+          placeholder="ap-beijing"
+          placeholderTextColor={colors.muted}
+          style={styles.input}
+          value={cosRegion}
+        />
+        <TextInput
+          autoCapitalize="none"
+          autoCorrect={false}
+          onChangeText={setCosSecretId}
+          placeholder="SecretId"
+          placeholderTextColor={colors.muted}
+          style={styles.input}
+          value={cosSecretId}
+        />
+        <TextInput
+          autoCapitalize="none"
+          autoCorrect={false}
+          onChangeText={setCosSecretKey}
+          placeholder="SecretKey"
+          placeholderTextColor={colors.muted}
+          secureTextEntry
+          style={styles.input}
+          value={cosSecretKey}
+        />
+        <TextInput
+          autoCapitalize="none"
+          autoCorrect={false}
+          onChangeText={setCosSessionToken}
+          placeholder="SessionToken (optional)"
+          placeholderTextColor={colors.muted}
+          style={styles.input}
+          value={cosSessionToken}
+        />
+        <TextInput
+          autoCapitalize="none"
+          autoCorrect={false}
+          onChangeText={setCosCredentialExpiresAt}
+          placeholder="Credential expires at ISO8601 (optional)"
+          placeholderTextColor={colors.muted}
+          style={styles.input}
+          value={cosCredentialExpiresAt}
+        />
+        <TextInput
+          autoCapitalize="none"
+          autoCorrect={false}
+          onChangeText={setCosKeyPrefix}
+          placeholder="Key prefix (optional)"
+          placeholderTextColor={colors.muted}
+          style={styles.input}
+          value={cosKeyPrefix}
+        />
+        <TextInput
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="numeric"
+          onChangeText={setCosSignedUrlExpiresSec}
+          placeholder="Signed URL expiry seconds (default 7200)"
+          placeholderTextColor={colors.muted}
+          style={styles.input}
+          value={cosSignedUrlExpiresSec}
+        />
+        <TextInput
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="numeric"
+          onChangeText={setCosFinalPassTimeoutMs}
+          placeholder="Final pass timeout ms (default 1800000)"
+          placeholderTextColor={colors.muted}
+          style={styles.input}
+          value={cosFinalPassTimeoutMs}
+        />
+
+        <Pressable onPress={() => setCosCleanupEnabled((value) => !value)} style={styles.switchButton}>
+          <Text style={styles.switchButtonText}>
+            Cleanup staged audio after terminal state: {cosCleanupEnabled ? 'ON' : 'OFF'}
+          </Text>
+        </Pressable>
+
+        <View style={styles.row}>
+          <Pressable onPress={onSaveCos} style={styles.primaryButton}>
+            <Text style={styles.primaryButtonText}>Save</Text>
+          </Pressable>
+          <Pressable onPress={onClearCos} style={styles.secondaryButton}>
+            <Text style={styles.secondaryButtonText}>Clear</Text>
+          </Pressable>
+        </View>
       </View>
 
       <View style={styles.card}>
@@ -342,6 +526,18 @@ const styles = StyleSheet.create({
   secondaryButtonText: {
     color: colors.ink,
     fontWeight: '700',
+  },
+  switchButton: {
+    alignItems: 'center',
+    borderColor: colors.border,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginTop: 14,
+    paddingVertical: 12,
+  },
+  switchButtonText: {
+    color: colors.ink,
+    fontWeight: '600',
   },
   savedLabel: {
     color: colors.muted,

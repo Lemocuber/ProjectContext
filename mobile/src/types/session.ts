@@ -1,4 +1,11 @@
 export type TitleStatus = 'pending' | 'completed' | 'failed';
+export type FinalPassStatus = 'pending' | 'completed' | 'failed';
+export type FinalPassFailureReason =
+  | 'upload_failed'
+  | 'url_expired'
+  | 'recognition_failed'
+  | 'timeout'
+  | 'unknown';
 
 export type SessionHistoryStatus = 'completed' | 'failed';
 
@@ -24,9 +31,15 @@ export type SessionHistoryItem = {
   endedAt: string;
   status: SessionHistoryStatus;
   transcript: string;
+  realtimeTranscriptRaw: string;
   fallbackTitle: string;
   highlightTapsMs: number[];
   finalizedSentences?: FinalizedSentence[];
+  finalPassStatus?: FinalPassStatus;
+  finalPassTaskId?: string;
+  finalPassFailureReason?: FinalPassFailureReason;
+  sourceAudioRemoteUrl?: string;
+  sourceAudioObjectKey?: string;
   appliedVocabularyId?: string;
   appliedVocabularyTerms?: string[];
   generatedTitle?: string;

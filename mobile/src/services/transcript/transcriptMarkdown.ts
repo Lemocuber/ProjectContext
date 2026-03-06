@@ -53,21 +53,29 @@ export function buildTranscriptMarkdown(params: {
   title: string;
   startedAt: string;
   endedAt: string;
-  sentences: FinalizedSentence[];
+  sentences?: FinalizedSentence[];
+  fallbackTranscript?: string;
 }): string {
   const started = new Date(params.startedAt);
   const ended = new Date(params.endedAt);
   const timeLine = buildTimeRangeLine(started, ended);
 
-  const body = params.sentences
-    .map((sentence) => {
-      const parts = [formatTimestamp(sentence.startMs)];
-      if (sentence.speakerLabel) parts.push(`[${sentence.speakerLabel}]`);
-      if (sentence.isHighlight) parts.push('[!IMPORTANT]');
-      parts.push(sentence.text.trim());
-      return parts.join(' ');
-    })
-    .join('\n');
+  const finalized = params.sentences || [];
+  const body = finalized.length
+    ? finalized
+        .map((sentence) => {
+          const parts = [formatTimestamp(sentence.startMs)];
+          if (sentence.speakerLabel) parts.push(`[${sentence.speakerLabel}]`);
+          if (sentence.isHighlight) parts.push('[!IMPORTANT]');
+          parts.push(sentence.text.trim());
+          return parts.join(' ');
+        })
+        .join('\n')
+    : (params.fallbackTranscript || '')
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .join('\n');
 
   return `# ${params.title}\n${timeLine}\n---\n${body}`.trim();
 }

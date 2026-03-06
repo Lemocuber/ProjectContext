@@ -1,5 +1,13 @@
 import * as SecureStore from 'expo-secure-store';
-import type { ExportMetadata, FinalizedSentence, SessionHistoryItem, SessionHistoryStatus, TitleStatus } from '../types/session';
+import type {
+  ExportMetadata,
+  FinalPassFailureReason,
+  FinalPassStatus,
+  FinalizedSentence,
+  SessionHistoryItem,
+  SessionHistoryStatus,
+  TitleStatus,
+} from '../types/session';
 
 const SESSION_HISTORY_KEY = 'session_history_v2';
 const MAX_HISTORY_ITEMS = 20;
@@ -10,6 +18,20 @@ function isSessionStatus(value: unknown): value is SessionHistoryStatus {
 
 function isTitleStatus(value: unknown): value is TitleStatus {
   return value === 'pending' || value === 'completed' || value === 'failed';
+}
+
+function isFinalPassStatus(value: unknown): value is FinalPassStatus {
+  return value === 'pending' || value === 'completed' || value === 'failed';
+}
+
+function isFinalPassFailureReason(value: unknown): value is FinalPassFailureReason {
+  return (
+    value === 'upload_failed' ||
+    value === 'url_expired' ||
+    value === 'recognition_failed' ||
+    value === 'timeout' ||
+    value === 'unknown'
+  );
 }
 
 function isExportMetadata(value: unknown): value is ExportMetadata {
@@ -70,6 +92,12 @@ function isSessionHistoryItem(value: unknown): value is SessionHistoryItem {
   if (typeof item.endedAt !== 'string') return false;
   if (!isSessionStatus(item.status)) return false;
   if (typeof item.transcript !== 'string') return false;
+  if (
+    typeof item.realtimeTranscriptRaw !== 'undefined' &&
+    typeof item.realtimeTranscriptRaw !== 'string'
+  ) {
+    return false;
+  }
   if (typeof item.fallbackTitle !== 'string') return false;
   if (!Array.isArray(item.highlightTapsMs)) return false;
   if (!item.highlightTapsMs.every((entry) => typeof entry === 'number' && Number.isFinite(entry))) {
@@ -97,6 +125,26 @@ function isSessionHistoryItem(value: unknown): value is SessionHistoryItem {
   }
   if (typeof item.generatedTitle !== 'undefined' && typeof item.generatedTitle !== 'string') return false;
   if (typeof item.titleStatus !== 'undefined' && !isTitleStatus(item.titleStatus)) return false;
+  if (typeof item.finalPassStatus !== 'undefined' && !isFinalPassStatus(item.finalPassStatus)) return false;
+  if (typeof item.finalPassTaskId !== 'undefined' && typeof item.finalPassTaskId !== 'string') return false;
+  if (
+    typeof item.finalPassFailureReason !== 'undefined' &&
+    !isFinalPassFailureReason(item.finalPassFailureReason)
+  ) {
+    return false;
+  }
+  if (
+    typeof item.sourceAudioRemoteUrl !== 'undefined' &&
+    typeof item.sourceAudioRemoteUrl !== 'string'
+  ) {
+    return false;
+  }
+  if (
+    typeof item.sourceAudioObjectKey !== 'undefined' &&
+    typeof item.sourceAudioObjectKey !== 'string'
+  ) {
+    return false;
+  }
   if (
     typeof item.transcriptMarkdownUri !== 'undefined' &&
     typeof item.transcriptMarkdownUri !== 'string'
@@ -125,7 +173,12 @@ export async function loadSessionHistory(): Promise<SessionHistoryItem[]> {
   try {
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter((entry): entry is SessionHistoryItem => isSessionHistoryItem(entry));
+    return parsed
+      .filter((entry): entry is SessionHistoryItem => isSessionHistoryItem(entry))
+      .map((entry) => ({
+        ...entry,
+        realtimeTranscriptRaw: entry.realtimeTranscriptRaw ?? entry.transcript,
+      }));
   } catch {
     return [];
   }
