@@ -636,6 +636,7 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
                 onPress={() => setFinalPassSpeakerMode(entry.value)}
                 style={[
                   styles.speakerModeChip,
+                  entry.value === 'auto' ? styles.speakerModeChipAuto : styles.speakerModeChipNumber,
                   selected ? styles.speakerModeChipSelected : null,
                   !canEditSpeakerMode ? styles.speakerModeChipDisabled : null,
                 ]}
@@ -739,11 +740,16 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: 10,
     borderWidth: 1,
-    flex: 1,
     flexDirection: 'row',
     gap: 4,
     height: 42,
     justifyContent: 'center',
+  },
+  speakerModeChipAuto: {
+    flex: 1.35,
+  },
+  speakerModeChipNumber: {
+    flex: 0.9,
   },
   speakerModeChipSelected: {
     backgroundColor: '#F5ECDF',

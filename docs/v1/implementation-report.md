@@ -65,6 +65,8 @@ V1 code was migrated to the corrected architecture where final transcript metada
   - pause on user scroll-away,
   - resume automatically after >15s user scroll inactivity.
 - Renamed default settings bundle asset to `mobile/assets/ProjectContext.config.json`, added Android prebuild copy to `android/app/src/main/assets/ProjectContext.config.json`, and switched runtime loading to read `asset:///ProjectContext.config.json`.
+- Switched app root safe-area handling to `react-native-safe-area-context` to correctly honor top camera/cutout insets on Android devices; configured Android status bar as translucent with transparent background so the app `bg` renders edge-to-edge behind the status icons.
+- Tuned pre-record speaker-mode selector chip widths to emphasize `Auto` and compress numeric options (`Auto` flex `1.35`, numbered flex `0.9`) for clearer visual priority.
 
 ## Validation Snapshot
 - `npm run typecheck` in `mobile/`: passed after record-screen UI tweak pass.

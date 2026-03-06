@@ -6,6 +6,8 @@ Correction note (2026-03-06): finalized transcript metadata in v1 is sourced fro
 Launch hardening note (2026-03-06): v1 supports build-time defaults from `mobile/assets/ProjectContext.config.json` with section hide/discard behavior and internal COS runtime policy knobs.
 UI polish note (2026-03-06): record controls use icons, post-stop review uses discard/continue split actions with two-tap discard confirmation, and recording transcript auto-scroll resumes after 15s inactivity.
 Scope change note (2026-03-06): pre-record speaker-mode selector (`auto`, `1 person no diarization`, `2 person`, `3 person`) controls file-ASR final-pass diarization parameters.
+Device compatibility note (2026-03-07): app root now uses `react-native-safe-area-context` to honor top camera/cutout insets across devices, with Android status bar running translucent/transparent for edge-to-edge background continuity.
+UI tuning note (2026-03-07): speaker-mode selector chip widths are weighted for faster scanning (`Auto` wider, numbered chips narrower).
 
 ## Files
 - [Product Definition](./product-definition.md)
