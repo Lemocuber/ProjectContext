@@ -219,7 +219,7 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
     const hasDeepSeekKey = !!deepSeekApiKey;
     const realtimeTranscriptRaw = event.text.trim();
     const cosSettings = await loadEffectiveCosSettings();
-    const internalRuntimeSettings = getInternalRuntimeSettings();
+    const internalRuntimeSettings = await getInternalRuntimeSettings();
     const cosConfigured = hasCompleteCosSettings(cosSettings);
     const canRunFinalPass = !!event.audioFileUri && cosConfigured;
 

@@ -1,4 +1,4 @@
-import rawConfig from '../../assets/ProjectContext.config.json';
+import { bundleDirectory, readAsStringAsync } from 'expo-file-system/legacy';
 import { syncDashScopeVocabulary } from '../services/vocabulary/dashscopeVocabularyService';
 import { prepareVocabulary } from '../services/vocabulary/vocabularyUtils';
 import {
@@ -67,6 +67,7 @@ const DEFAULT_INTERNAL: InternalRuntimeSettings = {
   finalPassTimeoutSec: 1800,
   cosCleanupEnabled: true,
 };
+const CONFIG_FILE_NAME = 'ProjectContext.config.json';
 
 function asTrimmedString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
@@ -145,7 +146,28 @@ function parseDefaults(input: unknown): ParsedDefaults {
     internal: parseInternal(config),
   };
 }
-const defaults = parseDefaults(rawConfig);
+let defaultsPromise: Promise<ParsedDefaults> | undefined;
+
+function getRuntimeConfigUri(): string | null {
+  if (!bundleDirectory) return null;
+  return `${bundleDirectory.endsWith('/') ? bundleDirectory : `${bundleDirectory}/`}${CONFIG_FILE_NAME}`;
+}
+
+async function loadRuntimeConfig(): Promise<ParsedDefaults> {
+  if (!defaultsPromise) {
+    defaultsPromise = (async () => {
+      try {
+        const configUri = getRuntimeConfigUri();
+        if (!configUri) return parseDefaults({});
+        const rawText = await readAsStringAsync(configUri);
+        return parseDefaults(JSON.parse(rawText));
+      } catch {
+        return parseDefaults({});
+      }
+    })();
+  }
+  return defaultsPromise;
+}
 
 function sameTerms(left: string[], right: string[]): boolean {
   if (left.length !== right.length) return false;
@@ -155,7 +177,8 @@ function sameTerms(left: string[], right: string[]): boolean {
   return true;
 }
 
-export function getHiddenSettingsSections(): HiddenSettingsSections {
+export async function getHiddenSettingsSections(): Promise<HiddenSettingsSections> {
+  const defaults = await loadRuntimeConfig();
   return {
     dashscope: !!defaults.dashscopeKey,
     deepseek: !!defaults.deepseekKey,
@@ -164,31 +187,36 @@ export function getHiddenSettingsSections(): HiddenSettingsSections {
   };
 }
 
-export function shouldHideSettingsTab(): boolean {
-  const sections = getHiddenSettingsSections();
+export async function shouldHideSettingsTab(): Promise<boolean> {
+  const sections = await getHiddenSettingsSections();
   return sections.dashscope && sections.deepseek && sections.tencentCos && sections.vocabulary;
 }
 
-export function getInternalRuntimeSettings(): InternalRuntimeSettings {
+export async function getInternalRuntimeSettings(): Promise<InternalRuntimeSettings> {
+  const defaults = await loadRuntimeConfig();
   return defaults.internal;
 }
 
 export async function loadEffectiveDashScopeApiKey(): Promise<string | null> {
+  const defaults = await loadRuntimeConfig();
   if (defaults.dashscopeKey) return defaults.dashscopeKey;
   return loadStoredApiKey();
 }
 
 export async function loadEffectiveDeepSeekApiKey(): Promise<string | null> {
+  const defaults = await loadRuntimeConfig();
   if (defaults.deepseekKey) return defaults.deepseekKey;
   return loadStoredDeepSeekApiKey();
 }
 
 export async function loadEffectiveCosSettings(): Promise<CosSettings> {
+  const defaults = await loadRuntimeConfig();
   if (defaults.tencentCos) return defaults.tencentCos;
   return loadStoredCosSettings();
 }
 
 export async function loadEffectiveVocabularySettings(): Promise<VocabularySettings> {
+  const defaults = await loadRuntimeConfig();
   if (!defaults.vocabularyTerms?.length || !defaults.vocabularyRawText) {
     return loadStoredVocabularySettings();
   }

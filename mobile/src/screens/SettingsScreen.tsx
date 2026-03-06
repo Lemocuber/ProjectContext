@@ -44,13 +44,13 @@ import {
 } from '../storage/cosSettingsStore';
 import { colors } from '../theme';
 
-const hiddenSections = getHiddenSettingsSections();
-const showDashScope = !hiddenSections.dashscope;
-const showDeepSeek = !hiddenSections.deepseek;
-const showTencentCos = !hiddenSections.tencentCos;
-const showVocabulary = !hiddenSections.vocabulary;
-
 export function SettingsScreen() {
+  const [hiddenSections, setHiddenSections] = useState<{
+    dashscope: boolean;
+    deepseek: boolean;
+    tencentCos: boolean;
+    vocabulary: boolean;
+  } | null>(null);
   const [apiKey, setApiKey] = useState('');
   const [savedMask, setSavedMask] = useState('');
   const [deepSeekApiKey, setDeepSeekApiKey] = useState('');
@@ -67,7 +67,16 @@ export function SettingsScreen() {
   const [cosSecretKey, setCosSecretKey] = useState('');
 
   useEffect(() => {
+    let alive = true;
     void (async () => {
+      const sections = await getHiddenSettingsSections();
+      if (!alive) return;
+      setHiddenSections(sections);
+      const showDashScope = !sections.dashscope;
+      const showDeepSeek = !sections.deepseek;
+      const showTencentCos = !sections.tencentCos;
+      const showVocabulary = !sections.vocabulary;
+
       const [dashScopeKey, deepSeekKey, vocabularySettings, cosSettings] = await Promise.all([
         showDashScope ? loadEffectiveDashScopeApiKey() : Promise.resolve<string | null>(null),
         showDeepSeek ? loadEffectiveDeepSeekApiKey() : Promise.resolve<string | null>(null),
@@ -88,6 +97,7 @@ export function SettingsScreen() {
               secretKey: '',
             }),
       ]);
+      if (!alive) return;
 
       if (dashScopeKey) setSavedMask(maskApiKey(dashScopeKey));
       if (deepSeekKey) setSavedDeepSeekMask(maskApiKey(deepSeekKey));
@@ -102,6 +112,9 @@ export function SettingsScreen() {
         hydrateCosSettings(cosSettings);
       }
     })();
+    return () => {
+      alive = false;
+    };
   }, []);
 
   const hydrateCosSettings = (settings: CosSettings) => {
@@ -256,6 +269,21 @@ export function SettingsScreen() {
     hydrateCosSettings(await loadEffectiveCosSettings());
     Alert.alert('Cleared', 'COS settings removed.');
   };
+
+  if (!hiddenSections) {
+    return (
+      <ScrollView contentContainerStyle={styles.layout}>
+        <View style={styles.card}>
+          <Text style={styles.title}>Loading settings config</Text>
+        </View>
+      </ScrollView>
+    );
+  }
+
+  const showDashScope = !hiddenSections.dashscope;
+  const showDeepSeek = !hiddenSections.deepseek;
+  const showTencentCos = !hiddenSections.tencentCos;
+  const showVocabulary = !hiddenSections.vocabulary;
 
   if (!showDashScope && !showDeepSeek && !showTencentCos && !showVocabulary) {
     return (

@@ -57,7 +57,7 @@ V1 code was migrated to the corrected architecture where final transcript metada
   - auto-scroll only when near bottom,
   - pause on user scroll-away,
   - resume automatically after >15s user scroll inactivity.
-- Renamed default settings bundle asset to `mobile/assets/ProjectContext.config.json`, restored direct JSON loading, and added Android prebuild copy to `android/app/src/main/assets/ProjectContext.config.json`.
+- Renamed default settings bundle asset to `mobile/assets/ProjectContext.config.json`, added Android prebuild copy to `android/app/src/main/assets/ProjectContext.config.json`, and switched runtime loading to read `asset:///ProjectContext.config.json`.
 
 ## Validation Snapshot
 - `npm run typecheck` in `mobile/`: passed after record-screen UI tweak pass.

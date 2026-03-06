@@ -61,6 +61,8 @@ Date: 2026-03-06
 ## Default Settings Asset Contract (V1 Launch)
 - App bundle includes `mobile/assets/ProjectContext.config.json`.
 - Android prebuild copies the same file to `android/app/src/main/assets/ProjectContext.config.json` for packaged APK inspection/extraction.
+- Android runtime reads config from `asset:///ProjectContext.config.json` (APK assets path) at startup.
+- If runtime JSON is missing/invalid, config defaults are treated as empty (no built-in bundled fallback override).
 - Supported keys:
   - `dashscopeKey: string`,
   - `deepseekKey: string`,
