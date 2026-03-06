@@ -56,9 +56,12 @@ Extend v0 capture into a review-and-export workflow with a strict two-stage tran
 - Record flow remains primary; record control uses start/stop icons.
 - Highlight action is single tap while recording.
 - Before recording starts, show a speaker-mode select in the highlight-action position.
-- Speaker-mode option row uses number + person icon cues:
-  - single-person icon for `1 person`,
-  - multi-person icon for `2 person`, `3 person`, and `auto decide`.
+- Speaker-mode control is a one-line inline selector with compact chips (`Auto`, `1`, `2`, `3`) and person/group icons only (no text labels).
+- Icon cues:
+  - auto icon (`hdr-auto`) for `Auto`,
+  - single-person icon for `1`,
+  - two-person icon for `2`,
+  - multi-person icon for `3`.
 - After stop, replace highlight action area with split post-record controls:
   - left secondary discard icon button (narrower),
   - right primary continue icon button (wider).

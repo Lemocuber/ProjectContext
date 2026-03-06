@@ -66,7 +66,7 @@
   - COS staging path works (upload mode)
   - signed URL expiry/fetch failure path is handled safely
   - file ASR final pass status transitions are visible (`pending` -> `completed|failed`)
-  - idle-state speaker-mode selector shows `auto`, `1 person (no diarization)`, `2 person`, `3 person` with number/person icon cues
+  - idle-state speaker-mode selector shows one-line inline chips (`Auto/1/2/3`) with badge+icon only (no text labels)
   - selected speaker mode maps correctly to final-pass request parameters (`diarization_enabled`, optional `speaker_count`)
   - session appears in History with speaker-attributed transcript when final pass succeeds
   - session fallback transcript remains usable when final pass fails

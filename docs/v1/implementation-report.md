@@ -25,7 +25,8 @@ V1 code was migrated to the corrected architecture where final transcript metada
   - fallback safely to raw realtime transcript when final pass fails/timeouts.
 - Final-pass speaker-mode control updates:
   - replaced idle-state highlight slot with a pre-record speaker-mode selector (`auto`, `1`, `2`, `3`),
-  - added number + person icon visual cues for speaker-mode options,
+  - refined selector to one-line inline chips (`Auto/1/2/3`) with badge+icon only (no text labels),
+  - used `hdr-auto` for `Auto`, `person` for `1`, `group` for `2`, and `groups` for `3` in Material icon set,
   - wired selected mode to file-ASR submission parameters (`diarization_enabled`, optional `speaker_count`),
   - kept realtime ASR request behavior unchanged.
 - Markdown/title/export flow updates:

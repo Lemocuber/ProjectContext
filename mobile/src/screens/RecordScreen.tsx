@@ -60,16 +60,15 @@ const DEFAULT_FINAL_PASS_SPEAKER_MODE: FinalPassSpeakerMode = 'auto';
 
 type FinalPassSpeakerModeOption = {
   value: FinalPassSpeakerMode;
-  label: string;
   badge: string;
-  icon: 'person' | 'groups';
+  icon: 'person' | 'group' | 'groups' | 'hdr-auto';
 };
 
 const FINAL_PASS_SPEAKER_MODE_OPTIONS: FinalPassSpeakerModeOption[] = [
-  { value: 'auto', label: 'Auto decide', badge: 'AUTO', icon: 'groups' },
-  { value: 'one', label: '1 person (no diarization)', badge: '1', icon: 'person' },
-  { value: 'two', label: '2 person', badge: '2', icon: 'groups' },
-  { value: 'three', label: '3 person', badge: '3', icon: 'groups' },
+  { value: 'auto', badge: 'Auto', icon: 'hdr-auto' },
+  { value: 'one', badge: '1', icon: 'person' },
+  { value: 'two', badge: '2', icon: 'group' },
+  { value: 'three', badge: '3', icon: 'groups' },
 ];
 
 function inferFinalPassFailureReason(error: unknown): FinalPassFailureReason {
@@ -97,7 +96,6 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
   const [finalPassSpeakerMode, setFinalPassSpeakerMode] = useState<FinalPassSpeakerMode>(
     DEFAULT_FINAL_PASS_SPEAKER_MODE,
   );
-  const [speakerModeMenuOpen, setSpeakerModeMenuOpen] = useState(false);
   const sessionRef = useRef<AsrSession | null>(null);
   const transcriptRef = useRef('');
   const startAtRef = useRef<string | null>(null);
@@ -125,14 +123,9 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
   const isBusy = status === 'processing' || hasPendingReview;
   const canEditSpeakerMode = !isRecording && !hasPendingReview && status !== 'processing';
 
-  const selectedFinalPassSpeakerMode =
-    FINAL_PASS_SPEAKER_MODE_OPTIONS.find((entry) => entry.value === finalPassSpeakerMode) ||
-    FINAL_PASS_SPEAKER_MODE_OPTIONS[0];
-
   const resetFinalPassSpeakerModeSelection = () => {
     setFinalPassSpeakerMode(DEFAULT_FINAL_PASS_SPEAKER_MODE);
     finalPassSpeakerModeRef.current = DEFAULT_FINAL_PASS_SPEAKER_MODE;
-    setSpeakerModeMenuOpen(false);
   };
 
   const isNearBottom = () => {
@@ -194,10 +187,6 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
     },
     [],
   );
-
-  useEffect(() => {
-    if (!canEditSpeakerMode) setSpeakerModeMenuOpen(false);
-  }, [canEditSpeakerMode]);
 
   const statusLabel = useMemo(() => {
     if (pendingFinalizeEvent) return 'Review Needed';
@@ -425,7 +414,6 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
     setHighlightCount(0);
     setPendingFinalizeEvent(null);
     setDiscardConfirmArmed(false);
-    setSpeakerModeMenuOpen(false);
     startAtRef.current = new Date().toISOString();
     startAtMsRef.current = Date.now();
     sessionIdRef.current = buildSessionId();
@@ -639,57 +627,24 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
         </Pressable>
       ) : (
         <View style={styles.speakerModeSelectWrap}>
-          <Pressable
-            disabled={!canEditSpeakerMode}
-            onPress={() => setSpeakerModeMenuOpen((current) => !current)}
-            style={[
-              styles.speakerModeSelectButton,
-              !canEditSpeakerMode ? styles.speakerModeSelectButtonDisabled : null,
-              speakerModeMenuOpen ? styles.speakerModeSelectButtonOpen : null,
-            ]}
-          >
-            <View style={styles.speakerModeValueWrap}>
-              <Text style={styles.speakerModeBadge}>{selectedFinalPassSpeakerMode.badge}</Text>
-              <MaterialIcons color={colors.ink} name={selectedFinalPassSpeakerMode.icon} size={18} />
-              <Text numberOfLines={1} style={styles.speakerModeLabel}>
-                {selectedFinalPassSpeakerMode.label}
-              </Text>
-            </View>
-            <MaterialIcons
-              color={colors.muted}
-              name={speakerModeMenuOpen ? 'keyboard-arrow-up' : 'keyboard-arrow-down'}
-              size={22}
-            />
-          </Pressable>
-          {speakerModeMenuOpen ? (
-            <View style={styles.speakerModeMenu}>
-              {FINAL_PASS_SPEAKER_MODE_OPTIONS.map((entry) => {
-                const selected = entry.value === finalPassSpeakerMode;
-                return (
-                  <Pressable
-                    key={entry.value}
-                    onPress={() => {
-                      setFinalPassSpeakerMode(entry.value);
-                      setSpeakerModeMenuOpen(false);
-                    }}
-                    style={[
-                      styles.speakerModeMenuItem,
-                      selected ? styles.speakerModeMenuItemSelected : null,
-                    ]}
-                  >
-                    <View style={styles.speakerModeValueWrap}>
-                      <Text style={styles.speakerModeBadge}>{entry.badge}</Text>
-                      <MaterialIcons color={colors.ink} name={entry.icon} size={18} />
-                      <Text numberOfLines={1} style={styles.speakerModeLabel}>
-                        {entry.label}
-                      </Text>
-                    </View>
-                    {selected ? <MaterialIcons color={colors.accent} name="check" size={18} /> : null}
-                  </Pressable>
-                );
-              })}
-            </View>
-          ) : null}
+          {FINAL_PASS_SPEAKER_MODE_OPTIONS.map((entry) => {
+            const selected = entry.value === finalPassSpeakerMode;
+            return (
+              <Pressable
+                disabled={!canEditSpeakerMode}
+                key={entry.value}
+                onPress={() => setFinalPassSpeakerMode(entry.value)}
+                style={[
+                  styles.speakerModeChip,
+                  selected ? styles.speakerModeChipSelected : null,
+                  !canEditSpeakerMode ? styles.speakerModeChipDisabled : null,
+                ]}
+              >
+                <Text style={styles.speakerModeBadge}>{entry.badge}</Text>
+                <MaterialIcons color={colors.ink} name={entry.icon} size={18} />
+              </Pressable>
+            );
+          })}
         </View>
       )}
       <Text style={styles.highlightCountText}>Highlights: {highlightCount}</Text>
@@ -774,62 +729,33 @@ const styles = StyleSheet.create({
   },
   speakerModeSelectWrap: {
     alignSelf: 'center',
+    flexDirection: 'row',
+    gap: 8,
     width: 242,
-    zIndex: 3,
   },
-  speakerModeSelectButton: {
+  speakerModeChip: {
     alignItems: 'center',
     backgroundColor: '#ECE7DD',
     borderColor: colors.border,
     borderRadius: 10,
     borderWidth: 1,
+    flex: 1,
     flexDirection: 'row',
+    gap: 4,
     height: 42,
-    justifyContent: 'space-between',
-    paddingHorizontal: 10,
+    justifyContent: 'center',
   },
-  speakerModeSelectButtonDisabled: {
-    opacity: 0.75,
-  },
-  speakerModeSelectButtonOpen: {
+  speakerModeChipSelected: {
+    backgroundColor: '#F5ECDF',
     borderColor: '#D2B59B',
   },
-  speakerModeValueWrap: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 8,
-    minWidth: 0,
+  speakerModeChipDisabled: {
+    opacity: 0.75,
   },
   speakerModeBadge: {
     color: colors.muted,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
-    width: 32,
-  },
-  speakerModeLabel: {
-    color: colors.ink,
-    flexShrink: 1,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  speakerModeMenu: {
-    backgroundColor: '#ECE7DD',
-    borderColor: colors.border,
-    borderRadius: 10,
-    borderWidth: 1,
-    marginTop: 6,
-    overflow: 'hidden',
-  },
-  speakerModeMenuItem: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    minHeight: 42,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  speakerModeMenuItemSelected: {
-    backgroundColor: '#F5ECDF',
   },
   postRecordActionsRow: {
     alignSelf: 'center',

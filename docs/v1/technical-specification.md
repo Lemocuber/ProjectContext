@@ -122,14 +122,18 @@ Date: 2026-03-06
   - show highlight button,
   - transcript panel supports conditional auto-scroll to bottom.
 - Before recording starts (and after a session resets), show a speaker-mode select control in the highlight-button slot.
-- Speaker-mode select options:
-  - `Auto decide` (default),
-  - `1 person (no diarization)`,
-  - `2 person`,
-  - `3 person`.
-- Selector UI uses numeric badge + person icon cue:
-  - single-person icon for `1 person`,
-  - multi-person icon for `2 person`, `3 person`, and `auto decide`.
+- Selector is rendered as a one-line inline option row (no dropdown).
+- Speaker-mode options map to compact chips:
+  - `Auto` (auto decide, default),
+  - `1` (1 person, no diarization),
+  - `2` (2 person hint),
+  - `3` (3 person hint).
+- UI uses badge + icon only (no text labels).
+- Icon cue:
+  - auto icon (`hdr-auto`) for `Auto`,
+  - single-person icon for `1`,
+  - two-person icon for `2`,
+  - multi-person icon for `3`.
 - Selection is fixed once recording begins and reset to `auto` when session state returns to fresh ready state after complete/discard/failure.
 - After stop (pending review):
   - replace highlight button area with split action row,

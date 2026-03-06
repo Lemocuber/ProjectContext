@@ -71,7 +71,7 @@ Date: 2026-03-06
   - signed URL remains valid through recognition completion in normal latency cases,
   - expired/invalid URL path fails safely and records failure reason,
   - post-record file ASR task submission/polling succeeds,
-  - pre-record speaker-mode UI shows expected options with number/person icon cues,
+  - pre-record speaker-mode UI shows a one-line inline chip row (`Auto/1/2/3`) with badge+icon only (no text labels),
   - selected speaker mode maps correctly to final-pass request parameters (`diarization_enabled`, optional `speaker_count`),
   - diarization visibility/fallback behavior matches spec,
   - fallback behavior when file ASR fails is safe and visible,
