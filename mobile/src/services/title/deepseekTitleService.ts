@@ -41,7 +41,7 @@ export async function generateSessionTitle(params: {
         {
           role: 'system',
           content:
-            'Return one concise session title (3-8 words), plain text only, no punctuation-heavy styling.',
+            'Return one concise session title in the same language as the transcript (use the dominant language if mixed). Keep it brief and natural for that language, plain text only, and avoid punctuation-heavy styling.',
         },
         {
           role: 'user',

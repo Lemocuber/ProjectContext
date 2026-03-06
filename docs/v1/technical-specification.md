@@ -223,6 +223,8 @@ Date: 2026-03-06
 - LLM title generation is attempted during finalize after final-pass transcript selection.
 - LLM provider for v1: DeepSeek (BYOK).
 - DeepSeek key handling follows existing BYOK storage/validation patterns.
+- Generated title language must match the transcript language (dominant language when transcript is mixed).
+- Title length should be brief and natural for the target language (do not enforce a fixed word-count across all languages).
 - On success, replace fallback title with generated title.
 - On failure, keep fallback title and mark `titleStatus="failed"`.
 
