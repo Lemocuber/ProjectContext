@@ -17,7 +17,7 @@ Project Context starts as an Android-first voice capture tool with real-time tra
 - Improve reliability for weak networks and long sessions. (Done)
 - Complete Android phone stability matrix and finalize v0 acceptance. (Done)
 
-### Phase 2: V1 Capture Intelligence (Planned)
+### Phase 2: V1 Capture Intelligence (Completed)
 - Add highlight button during recording.
 - Save highlight timestamps.
 - Persist an unprocessed realtime transcript copy for fallback.
@@ -29,7 +29,7 @@ Project Context starts as an Android-first voice capture tool with real-time tra
 - Support zero-backend COS staging (BYOK upload) for post-record file ASR.
 - Support build-time default settings preload from bundled `assets/ProjectContext.config.json` with section-level hide/discard behavior.
 
-### Phase 3: V1 Title and Export (Planned)
+### Phase 3: V1 Title and Export (Completed)
 - Add LLM-generated session title after finalization.
 - Add finalized markdown transcript artifact with timestamped sentence lines.
 - Add markdown auto-export to `Downloads` after finalize.

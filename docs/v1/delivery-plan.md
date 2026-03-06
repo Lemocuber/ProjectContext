@@ -7,7 +7,7 @@ Date: 2026-03-06
 - This is invalid for diarization requirements.
 - v1 is re-scoped to use post-record file ASR final pass for all final transcript metadata.
 - Architecture rework is implemented in code.
-- Remaining for acceptance: manual Android validation and CI/APK gate confirmation.
+- Acceptance and release gates are completed (manual Android validation + CI/APK confirmation).
 
 ## Milestone 1: Capture and Fallback Baseline
 - Keep realtime transcript for in-session display.

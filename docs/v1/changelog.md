@@ -12,3 +12,4 @@ This file tracks dated scope corrections and UI/doc updates for the v1 spec pack
 - Launch hardening: v1 supports build-time defaults from `mobile/assets/ProjectContext.config.json` with section hide/discard behavior and internal COS runtime policy knobs.
 - UI polish: record controls use icons, post-stop review uses discard/continue split actions with two-tap discard confirmation, and recording transcript auto-scroll resumes after 15s inactivity.
 - Scope change: pre-record speaker-mode selector (`auto`, `1 person no diarization`, `2 person`, `3 person`) controls file-ASR final-pass diarization parameters.
+- Closeout: v1 docs and execution gates are marked completed/accepted.

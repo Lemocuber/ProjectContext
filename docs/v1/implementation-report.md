@@ -70,9 +70,9 @@ V1 code was migrated to the corrected architecture where final transcript metada
 
 ## Validation Snapshot
 - `npm run typecheck` in `mobile/`: passed after record-screen UI tweak pass.
-- Manual Android phone validation and CI/APK gates: pending.
+- Manual Android phone validation and CI/APK gates: passed.
 
 ## Current Status
 - Spec/docs: aligned to file-ASR final-pass model.
 - Code: migrated to final-pass architecture.
-- Release readiness: pending manual E2E validation and CI/APK gate confirmation.
+- Release readiness: complete for v1 scope.
