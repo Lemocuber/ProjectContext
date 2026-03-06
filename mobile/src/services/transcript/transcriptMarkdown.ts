@@ -82,10 +82,11 @@ export function buildTranscriptMarkdown(params: {
 
 export function sanitizeFileNameSegment(value: string): string {
   const clean = value
-    .normalize('NFKD')
-    .replace(/[^\w\s-]/g, '')
+    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, ' ')
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-')
+    .replace(/^\.+/, '')
+    .replace(/\.+$/, '')
     .replace(/^-+|-+$/g, '')
     .slice(0, 64);
   return clean || 'session';

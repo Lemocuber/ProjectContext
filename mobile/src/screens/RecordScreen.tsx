@@ -17,7 +17,6 @@ import { generateSessionTitle } from '../services/title/deepseekTitleService';
 import {
   buildMarkdownFileName,
   buildTranscriptMarkdown,
-  overwriteTranscriptMarkdown,
   saveTranscriptMarkdown,
 } from '../services/transcript/transcriptMarkdown';
 import { loadApiKey } from '../storage/apiKeyStore';
@@ -142,6 +141,8 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
     let sourceAudioObjectKey: string | undefined;
     let finalizedSentences: FinalizedSentence[] = [];
     let bestTranscriptText = realtimeTranscriptRaw;
+    let generatedTitle: string | undefined;
+    let titleStatus: 'pending' | 'completed' | 'failed' = hasDeepSeekKey ? 'pending' : 'failed';
 
     await persistSession({
       id: sessionIdRef.current,
@@ -158,7 +159,7 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
       audioFileUri: event.audioFileUri ?? undefined,
       appliedVocabularyId: appliedVocabularyIdRef.current,
       appliedVocabularyTerms: [...appliedVocabularyTermsRef.current],
-      titleStatus: hasDeepSeekKey ? 'pending' : 'failed',
+      titleStatus,
     });
     if (canRunFinalPass && event.audioFileUri) {
       try {
@@ -212,18 +213,36 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
       }
     }
 
+    if (hasDeepSeekKey && bestTranscriptText.trim()) {
+      setInfoText('Generating session title...');
+      try {
+        generatedTitle = await generateSessionTitle({
+          apiKey: deepSeekApiKey,
+          transcript: bestTranscriptText,
+          highlights: collectHighlightTexts(finalizedSentences),
+        });
+        titleStatus = 'completed';
+      } catch {
+        titleStatus = 'failed';
+      }
+    } else if (hasDeepSeekKey) {
+      titleStatus = 'failed';
+    }
+
+    const finalTitle = generatedTitle || fallbackTitle;
     const markdown = buildTranscriptMarkdown({
-      title: fallbackTitle,
+      title: finalTitle,
       startedAt,
       endedAt,
       sentences: finalPassStatus === 'completed' ? finalizedSentences : undefined,
       fallbackTranscript: finalPassStatus === 'completed' ? undefined : realtimeTranscriptRaw,
     });
     const transcriptMarkdownUri = saveTranscriptMarkdown(sessionIdRef.current, markdown);
-    const markdownFileName = buildMarkdownFileName(startedAt, fallbackTitle);
+    const markdownFileName = buildMarkdownFileName(startedAt, finalTitle);
 
     let markdownAutoExportStatus: 'completed' | 'failed' = 'failed';
     let markdownLastPath: string | undefined;
+    setInfoText('Exporting markdown to Downloads...');
     try {
       markdownLastPath = await exportTextToDownloads({
         fileName: markdownFileName,
@@ -238,7 +257,9 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
 
     await updateSessionHistoryItem(sessionIdRef.current, (item) => ({
       ...item,
-      transcript: bestTranscriptText,
+      transcript: markdown,
+      generatedTitle,
+      titleStatus,
       finalizedSentences: finalPassStatus === 'completed' ? finalizedSentences : [],
       finalPassStatus,
       finalPassTaskId,
@@ -254,47 +275,6 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
       },
     }));
     onHistoryUpdated?.();
-
-    if (!hasDeepSeekKey || !bestTranscriptText.trim()) {
-      if (hasDeepSeekKey) {
-        await updateSessionHistoryItem(sessionIdRef.current, (item) => ({
-          ...item,
-          titleStatus: 'failed',
-        }));
-        onHistoryUpdated?.();
-      }
-      return;
-    }
-
-    try {
-      const title = await generateSessionTitle({
-        apiKey: deepSeekApiKey,
-        transcript: bestTranscriptText,
-        highlights: collectHighlightTexts(finalizedSentences),
-      });
-
-      const nextMarkdown = buildTranscriptMarkdown({
-        title,
-        startedAt,
-        endedAt,
-        sentences: finalPassStatus === 'completed' ? finalizedSentences : undefined,
-        fallbackTranscript: finalPassStatus === 'completed' ? undefined : realtimeTranscriptRaw,
-      });
-      overwriteTranscriptMarkdown(transcriptMarkdownUri, nextMarkdown);
-
-      await updateSessionHistoryItem(sessionIdRef.current, (item) => ({
-        ...item,
-        generatedTitle: title,
-        titleStatus: 'completed',
-      }));
-      onHistoryUpdated?.();
-    } catch {
-      await updateSessionHistoryItem(sessionIdRef.current, (item) => ({
-        ...item,
-        titleStatus: 'failed',
-      }));
-      onHistoryUpdated?.();
-    }
   };
 
   const start = async () => {

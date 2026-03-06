@@ -143,7 +143,7 @@ Date: 2026-03-06
 ## Title Generation Rule
 - Fallback title is available immediately at finalize:
   - `Record YY-MM-DD hh:mm` (session start local time).
-- LLM title generation runs asynchronously after finalize.
+- LLM title generation is attempted during finalize after final-pass transcript selection.
 - LLM provider for v1: DeepSeek (BYOK).
 - DeepSeek key handling follows existing BYOK storage/validation patterns.
 - On success, replace fallback title with generated title.
@@ -162,11 +162,13 @@ Date: 2026-03-06
     - fallback path: plain transcript lines without speaker/timestamp/highlight tags.
 - Duration in minutes is rounded to nearest minute.
 - Store markdown artifact in local app storage and reference via `transcriptMarkdownUri`.
+- Persist `SessionHistoryItem.transcript` from the same finalized markdown content so History text matches export content.
 
 ## Filename and Export
 - Markdown filename: `YYMMDD-{Title}.md` (sanitized for filesystem safety).
+- Filename sanitization uses a blacklist of filesystem-invalid characters and preserves non-Latin characters.
 - Destination: user `Downloads` directory.
-- Auto-export markdown once after finalization flow completes.
+- Auto-export markdown once after final-pass completion and title-generation attempt.
 - Auto-export failure does not trigger background retry on next launch.
 - Manual export actions remain available for markdown and audio.
 - In-app stored artifacts are always retained even if export fails.

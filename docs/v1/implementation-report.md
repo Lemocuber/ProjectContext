@@ -39,6 +39,9 @@ V1 code was migrated to the corrected architecture where final transcript metada
 
 ## Post-Implementation Fixes
 - Adjusted file-ASR parsing to use sentence containers only (`sentences` -> `segments` -> `utterances`) and avoid word-level token lines being rendered as transcript sentences.
+- Changed completed-session transcript persistence so History displays the same markdown content as the exported transcript artifact.
+- Moved markdown auto-export to run after final-pass completion and title-generation attempt, so exported filenames/content use the final chosen title.
+- Updated filename sanitization to blacklist-only filtering so non-Latin titles are preserved.
 
 ## Validation Snapshot
 - `npm run typecheck` in `mobile/`: passed after migration.

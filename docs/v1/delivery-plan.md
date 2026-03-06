@@ -46,6 +46,7 @@ Date: 2026-03-06
 - Vocabulary settings apply globally (no per-session override in v1).
 - Each completed session has immediate fallback title, later replaced by LLM title when generation succeeds.
 - Markdown auto-export runs after finalize to `Downloads`.
+- Markdown auto-export runs after final-pass completion and title-generation attempt to ensure final title/content are exported.
 - Auto-export failure does not retry automatically on next app launch.
 - Auto-export emits toast feedback for success/failure.
 - Manual markdown/audio export actions are available in history/detail.
