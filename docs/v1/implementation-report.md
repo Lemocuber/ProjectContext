@@ -23,6 +23,11 @@ V1 code was migrated to the corrected architecture where final transcript metada
   - parse sentence timing/speaker labels from file-ASR output,
   - anchor highlight taps only after successful file ASR,
   - fallback safely to raw realtime transcript when final pass fails/timeouts.
+- Final-pass speaker-mode control updates:
+  - replaced idle-state highlight slot with a pre-record speaker-mode selector (`auto`, `1`, `2`, `3`),
+  - added number + person icon visual cues for speaker-mode options,
+  - wired selected mode to file-ASR submission parameters (`diarization_enabled`, optional `speaker_count`),
+  - kept realtime ASR request behavior unchanged.
 - Markdown/title/export flow updates:
   - success markdown path uses sentence-level timestamp/speaker/highlight markers,
   - fallback markdown path writes plain transcript lines without synthetic timestamp/speaker tags,
@@ -42,7 +47,8 @@ V1 code was migrated to the corrected architecture where final transcript metada
 - Follow-through checks:
   - removed finalized metadata consumption from realtime event shape,
   - moved finalized sentence derivation to recorded/file ASR service path,
-  - updated markdown generation to avoid fabricated metadata in fallback mode.
+  - updated markdown generation to avoid fabricated metadata in fallback mode,
+  - removed hardcoded file-ASR `diarization_enabled=true` behavior and replaced with explicit UI-driven mapping.
 
 ## Post-Implementation Fixes
 - Adjusted file-ASR parsing to use sentence containers only (`sentences` -> `segments` -> `utterances`) and avoid word-level token lines being rendered as transcript sentences.

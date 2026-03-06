@@ -22,6 +22,7 @@ Project Context starts as an Android-first voice capture tool with real-time tra
 - Save highlight timestamps.
 - Persist an unprocessed realtime transcript copy for fallback.
 - Run post-record file ASR after finalize to produce sentence-level timing metadata.
+- Add pre-record speaker-mode selector for file-ASR final pass (`auto`, `1 person no diarization`, `2 person`, `3 person`).
 - Map highlights to finalized sentence lines from file ASR results.
 - Add speaker diarization in finalized transcript output from file ASR only.
 - Add custom vocabulary textarea UI (one term per line), sync to vocabulary service, and apply internal `vocabulary_id` to recognition requests.

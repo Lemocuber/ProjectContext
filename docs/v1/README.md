@@ -5,6 +5,7 @@ Scope and implementation docs for the v1 feature set.
 Correction note (2026-03-06): finalized transcript metadata in v1 is sourced from post-record file ASR, not realtime ASR.
 Launch hardening note (2026-03-06): v1 supports build-time defaults from `mobile/assets/ProjectContext.config.json` with section hide/discard behavior and internal COS runtime policy knobs.
 UI polish note (2026-03-06): record controls use icons, post-stop review uses discard/continue split actions with two-tap discard confirmation, and recording transcript auto-scroll resumes after 15s inactivity.
+Scope change note (2026-03-06): pre-record speaker-mode selector (`auto`, `1 person no diarization`, `2 person`, `3 person`) controls file-ASR final-pass diarization parameters.
 
 ## Files
 - [Product Definition](./product-definition.md)

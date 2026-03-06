@@ -19,6 +19,7 @@ Date: 2026-03-06
 
 ## Milestone 2: Post-Record Recognition Final Pass
 - Stage audio to COS after recording finalize.
+- Add pre-record speaker-mode selector to control final-pass diarization behavior.
 - Submit recorded audio to file ASR at finalize.
 - Poll/query async task until terminal state.
 - Parse finalized sentence-level timing and diarization output from file ASR results.
@@ -38,6 +39,9 @@ Date: 2026-03-06
 - Live transcript remains clean (no timestamp/speaker/highlight tags).
 - Raw realtime transcript is persisted for every session as fallback.
 - Session final pass uses an accessible COS HTTPS signed URL generated for app-uploaded audio.
+- Before recording starts, user can select final-pass speaker mode: auto (default), 1-person no diarization, 2-person hint, 3-person hint.
+- File ASR request parameters reflect selected speaker mode exactly.
+- Realtime ASR path remains unchanged by speaker-mode selection.
 - Signed URL validity is handled explicitly (no silent success assumptions when URL expires).
 - Finalized markdown transcript uses file ASR output for sentence timestamps and speaker labels.
 - Highlight taps resolve to sentence-level `[!IMPORTANT]` markers only when file ASR succeeds.
@@ -67,6 +71,8 @@ Date: 2026-03-06
   - signed URL remains valid through recognition completion in normal latency cases,
   - expired/invalid URL path fails safely and records failure reason,
   - post-record file ASR task submission/polling succeeds,
+  - pre-record speaker-mode UI shows expected options with number/person icon cues,
+  - selected speaker mode maps correctly to final-pass request parameters (`diarization_enabled`, optional `speaker_count`),
   - diarization visibility/fallback behavior matches spec,
   - fallback behavior when file ASR fails is safe and visible,
   - fallback title then LLM-title replacement behavior,

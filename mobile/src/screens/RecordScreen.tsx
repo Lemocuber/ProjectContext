@@ -15,6 +15,7 @@ import {
 import {
   FinalPassError,
   runDashScopeRecordedFinalPass,
+  type FinalPassSpeakerMode,
 } from '../services/asr/dashscopeRecordedRecognition';
 import {
   getInternalRuntimeSettings,
@@ -55,6 +56,21 @@ type RecordScreenProps = {
 const AUTO_SCROLL_INACTIVITY_MS = 15_000;
 const AUTO_SCROLL_BOTTOM_THRESHOLD_PX = 56;
 const AUTO_SCROLL_THROTTLE_MS = 250;
+const DEFAULT_FINAL_PASS_SPEAKER_MODE: FinalPassSpeakerMode = 'auto';
+
+type FinalPassSpeakerModeOption = {
+  value: FinalPassSpeakerMode;
+  label: string;
+  badge: string;
+  icon: 'person' | 'groups';
+};
+
+const FINAL_PASS_SPEAKER_MODE_OPTIONS: FinalPassSpeakerModeOption[] = [
+  { value: 'auto', label: 'Auto decide', badge: 'AUTO', icon: 'groups' },
+  { value: 'one', label: '1 person (no diarization)', badge: '1', icon: 'person' },
+  { value: 'two', label: '2 person', badge: '2', icon: 'groups' },
+  { value: 'three', label: '3 person', badge: '3', icon: 'groups' },
+];
 
 function inferFinalPassFailureReason(error: unknown): FinalPassFailureReason {
   if (error instanceof FinalPassError) return error.reason;
@@ -78,6 +94,10 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
     Extract<AsrEvent, { type: 'final' }> | null
   >(null);
   const [discardConfirmArmed, setDiscardConfirmArmed] = useState(false);
+  const [finalPassSpeakerMode, setFinalPassSpeakerMode] = useState<FinalPassSpeakerMode>(
+    DEFAULT_FINAL_PASS_SPEAKER_MODE,
+  );
+  const [speakerModeMenuOpen, setSpeakerModeMenuOpen] = useState(false);
   const sessionRef = useRef<AsrSession | null>(null);
   const transcriptRef = useRef('');
   const startAtRef = useRef<string | null>(null);
@@ -85,6 +105,7 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
   const sessionIdRef = useRef('');
   const persistedRef = useRef(false);
   const highlightTapsMsRef = useRef<number[]>([]);
+  const finalPassSpeakerModeRef = useRef<FinalPassSpeakerMode>(DEFAULT_FINAL_PASS_SPEAKER_MODE);
   const appliedVocabularyIdRef = useRef<string | undefined>(undefined);
   const appliedVocabularyTermsRef = useRef<string[]>([]);
   const transcriptScrollRef = useRef<ScrollView | null>(null);
@@ -102,6 +123,17 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
   const isRecording = status === 'recording';
   const hasPendingReview = !!pendingFinalizeEvent;
   const isBusy = status === 'processing' || hasPendingReview;
+  const canEditSpeakerMode = !isRecording && !hasPendingReview && status !== 'processing';
+
+  const selectedFinalPassSpeakerMode =
+    FINAL_PASS_SPEAKER_MODE_OPTIONS.find((entry) => entry.value === finalPassSpeakerMode) ||
+    FINAL_PASS_SPEAKER_MODE_OPTIONS[0];
+
+  const resetFinalPassSpeakerModeSelection = () => {
+    setFinalPassSpeakerMode(DEFAULT_FINAL_PASS_SPEAKER_MODE);
+    finalPassSpeakerModeRef.current = DEFAULT_FINAL_PASS_SPEAKER_MODE;
+    setSpeakerModeMenuOpen(false);
+  };
 
   const isNearBottom = () => {
     const metrics = scrollMetricsRef.current;
@@ -162,6 +194,10 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
     },
     [],
   );
+
+  useEffect(() => {
+    if (!canEditSpeakerMode) setSpeakerModeMenuOpen(false);
+  }, [canEditSpeakerMode]);
 
   const statusLabel = useMemo(() => {
     if (pendingFinalizeEvent) return 'Review Needed';
@@ -277,6 +313,7 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
           sourceAudioRemoteUrl,
           timeoutMs: internalRuntimeSettings.finalPassTimeoutSec * 1000,
           vocabularyId: appliedVocabularyIdRef.current,
+          speakerMode: finalPassSpeakerModeRef.current,
           onStatus: (message) => setInfoText(message),
         });
 
@@ -388,11 +425,13 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
     setHighlightCount(0);
     setPendingFinalizeEvent(null);
     setDiscardConfirmArmed(false);
+    setSpeakerModeMenuOpen(false);
     startAtRef.current = new Date().toISOString();
     startAtMsRef.current = Date.now();
     sessionIdRef.current = buildSessionId();
     persistedRef.current = false;
     highlightTapsMsRef.current = [];
+    finalPassSpeakerModeRef.current = finalPassSpeakerMode;
     appliedVocabularyIdRef.current = undefined;
     appliedVocabularyTermsRef.current = [];
     autoScrollEnabledRef.current = true;
@@ -435,6 +474,7 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
             setErrorText(event.message);
             setStatus('failed');
             setInfoText('');
+            resetFinalPassSpeakerModeSelection();
             void persistFailedSession({
               message: event.message,
               audioFileUri: event.audioFileUri,
@@ -447,6 +487,7 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
       const message = error instanceof Error ? error.message : 'Failed to start audio session.';
       setErrorText(message);
       setInfoText('');
+      resetFinalPassSpeakerModeSelection();
       await persistFailedSession({ message });
     }
   };
@@ -461,6 +502,7 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
       const message = error instanceof Error ? error.message : 'Failed to stop audio session.';
       setErrorText(message);
       setInfoText('');
+      resetFinalPassSpeakerModeSelection();
       await persistFailedSession({ message });
     } finally {
       sessionRef.current = null;
@@ -497,6 +539,7 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
       });
     } finally {
       setInfoText('');
+      resetFinalPassSpeakerModeSelection();
       if (!failed) {
         setStatus('idle');
       }
@@ -524,6 +567,7 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
 
     setPendingFinalizeEvent(null);
     setDiscardConfirmArmed(false);
+    resetFinalPassSpeakerModeSelection();
     setStatus('idle');
     setTranscriptText('');
     transcriptRef.current = '';
@@ -535,6 +579,7 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
     sessionIdRef.current = '';
     persistedRef.current = false;
     highlightTapsMsRef.current = [];
+    finalPassSpeakerModeRef.current = DEFAULT_FINAL_PASS_SPEAKER_MODE;
     appliedVocabularyIdRef.current = undefined;
     appliedVocabularyTermsRef.current = [];
     autoScrollEnabledRef.current = true;
@@ -588,14 +633,64 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
             <MaterialIcons color="#fff" name="check" size={26} />
           </Pressable>
         </View>
-      ) : (
-        <Pressable
-          disabled={!isRecording}
-          onPress={markHighlight}
-          style={[styles.highlightButton, !isRecording ? styles.highlightButtonDisabled : null]}
-        >
+      ) : isRecording ? (
+        <Pressable onPress={markHighlight} style={styles.highlightButton}>
           <Text style={styles.highlightButtonText}>Mark Highlight</Text>
         </Pressable>
+      ) : (
+        <View style={styles.speakerModeSelectWrap}>
+          <Pressable
+            disabled={!canEditSpeakerMode}
+            onPress={() => setSpeakerModeMenuOpen((current) => !current)}
+            style={[
+              styles.speakerModeSelectButton,
+              !canEditSpeakerMode ? styles.speakerModeSelectButtonDisabled : null,
+              speakerModeMenuOpen ? styles.speakerModeSelectButtonOpen : null,
+            ]}
+          >
+            <View style={styles.speakerModeValueWrap}>
+              <Text style={styles.speakerModeBadge}>{selectedFinalPassSpeakerMode.badge}</Text>
+              <MaterialIcons color={colors.ink} name={selectedFinalPassSpeakerMode.icon} size={18} />
+              <Text numberOfLines={1} style={styles.speakerModeLabel}>
+                {selectedFinalPassSpeakerMode.label}
+              </Text>
+            </View>
+            <MaterialIcons
+              color={colors.muted}
+              name={speakerModeMenuOpen ? 'keyboard-arrow-up' : 'keyboard-arrow-down'}
+              size={22}
+            />
+          </Pressable>
+          {speakerModeMenuOpen ? (
+            <View style={styles.speakerModeMenu}>
+              {FINAL_PASS_SPEAKER_MODE_OPTIONS.map((entry) => {
+                const selected = entry.value === finalPassSpeakerMode;
+                return (
+                  <Pressable
+                    key={entry.value}
+                    onPress={() => {
+                      setFinalPassSpeakerMode(entry.value);
+                      setSpeakerModeMenuOpen(false);
+                    }}
+                    style={[
+                      styles.speakerModeMenuItem,
+                      selected ? styles.speakerModeMenuItemSelected : null,
+                    ]}
+                  >
+                    <View style={styles.speakerModeValueWrap}>
+                      <Text style={styles.speakerModeBadge}>{entry.badge}</Text>
+                      <MaterialIcons color={colors.ink} name={entry.icon} size={18} />
+                      <Text numberOfLines={1} style={styles.speakerModeLabel}>
+                        {entry.label}
+                      </Text>
+                    </View>
+                    {selected ? <MaterialIcons color={colors.accent} name="check" size={18} /> : null}
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : null}
+        </View>
       )}
       <Text style={styles.highlightCountText}>Highlights: {highlightCount}</Text>
 
@@ -672,13 +767,69 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 10,
   },
-  highlightButtonDisabled: {
-    backgroundColor: colors.border,
-  },
   highlightButtonText: {
     color: '#fff',
     fontSize: 14,
     fontWeight: '700',
+  },
+  speakerModeSelectWrap: {
+    alignSelf: 'center',
+    width: 242,
+    zIndex: 3,
+  },
+  speakerModeSelectButton: {
+    alignItems: 'center',
+    backgroundColor: '#ECE7DD',
+    borderColor: colors.border,
+    borderRadius: 10,
+    borderWidth: 1,
+    flexDirection: 'row',
+    height: 42,
+    justifyContent: 'space-between',
+    paddingHorizontal: 10,
+  },
+  speakerModeSelectButtonDisabled: {
+    opacity: 0.75,
+  },
+  speakerModeSelectButtonOpen: {
+    borderColor: '#D2B59B',
+  },
+  speakerModeValueWrap: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    minWidth: 0,
+  },
+  speakerModeBadge: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: '700',
+    width: 32,
+  },
+  speakerModeLabel: {
+    color: colors.ink,
+    flexShrink: 1,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  speakerModeMenu: {
+    backgroundColor: '#ECE7DD',
+    borderColor: colors.border,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginTop: 6,
+    overflow: 'hidden',
+  },
+  speakerModeMenuItem: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 42,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  speakerModeMenuItemSelected: {
+    backgroundColor: '#F5ECDF',
   },
   postRecordActionsRow: {
     alignSelf: 'center',

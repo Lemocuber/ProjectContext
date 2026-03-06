@@ -4,6 +4,7 @@ Date: 2026-03-06
 
 ## Scope Additions Over V0
 - Highlight tap capture and sentence-level transcript anchoring.
+- Pre-record speaker-mode selector for post-record file ASR diarization behavior.
 - Build-time default settings asset contract (`mobile/assets/ProjectContext.config.json`) with section-level preload and UI-hiding.
 - Post-record file ASR final pass as the source of truth for:
   - sentence timestamps,
@@ -86,27 +87,32 @@ Date: 2026-03-06
 
 ## Recording and Finalization Pipeline
 1. Start recording and realtime ASR stream for live transcript UX.
-2. Capture highlight taps as `tapMs` while recording.
-3. Persist rolling raw realtime transcript content for fallback.
-4. On stop, persist audio artifact and enter post-record review state.
-5. Post-record review actions:
+2. Before start, user can set speaker mode for final-pass file ASR:
+  - `auto` (default): diarization enabled, no fixed speaker count,
+  - `1 person`: diarization disabled,
+  - `2 person`: diarization enabled with speaker-count hint `2`,
+  - `3 person`: diarization enabled with speaker-count hint `3`.
+3. Capture highlight taps as `tapMs` while recording.
+4. Persist rolling raw realtime transcript content for fallback.
+5. On stop, persist audio artifact and enter post-record review state.
+6. Post-record review actions:
   - discard (requires two-tap confirmation before delete/reset),
   - continue (starts existing finalize pipeline).
-6. Stage recorded audio to COS (zero-backend BYOK upload mode).
-7. Resolve a publicly fetchable HTTPS URL for file ASR (prefer signed URL).
-8. Submit file ASR recognition task for the staged audio URL.
-9. Poll/query recognition task until terminal state.
-10. If file ASR succeeds:
+7. Stage recorded audio to COS (zero-backend BYOK upload mode).
+8. Resolve a publicly fetchable HTTPS URL for file ASR (prefer signed URL).
+9. Submit file ASR recognition task for the staged audio URL with selected speaker-mode parameters.
+10. Poll/query recognition task until terminal state.
+11. If file ASR succeeds:
   - parse sentence timestamps/speakers from result,
   - anchor highlight taps to finalized sentences,
   - generate markdown transcript artifact from finalized sentences.
-11. If file ASR fails/times out:
+12. If file ASR fails/times out:
   - mark `finalPassStatus="failed"`,
   - set `finalPassFailureReason`,
   - keep `realtimeTranscriptRaw` as session fallback transcript,
   - skip speaker/timestamp enrichment.
-12. Trigger title generation and markdown export using best available transcript artifact.
-13. Persist title updates and export statuses for history/detail rendering.
+13. Trigger title generation and markdown export using best available transcript artifact.
+14. Persist title updates and export statuses for history/detail rendering.
 
 ## Record Screen Controls
 - Primary record button uses icon-only states:
@@ -115,6 +121,16 @@ Date: 2026-03-06
 - While recording:
   - show highlight button,
   - transcript panel supports conditional auto-scroll to bottom.
+- Before recording starts (and after a session resets), show a speaker-mode select control in the highlight-button slot.
+- Speaker-mode select options:
+  - `Auto decide` (default),
+  - `1 person (no diarization)`,
+  - `2 person`,
+  - `3 person`.
+- Selector UI uses numeric badge + person icon cue:
+  - single-person icon for `1 person`,
+  - multi-person icon for `2 person`, `3 person`, and `auto decide`.
+- Selection is fixed once recording begins and reset to `auto` when session state returns to fresh ready state after complete/discard/failure.
 - After stop (pending review):
   - replace highlight button area with split action row,
   - left action: discard icon button, secondary style, narrower width,
@@ -187,6 +203,15 @@ Date: 2026-03-06
 - If speaker information is available for a finalized sentence, render inline as `[Speaker N]`.
 - If speaker information is unavailable, omit speaker label entirely.
 - Do not infer speaker labels from realtime ASR payloads.
+
+## Final-Pass Speaker Mode Rule
+- Speaker-mode selection affects post-record file ASR task submission only.
+- Parameter mapping for file ASR request:
+  - `auto decide` -> `diarization_enabled=true` with no `speaker_count`,
+  - `1 person (no diarization)` -> `diarization_enabled=false`,
+  - `2 person` -> `diarization_enabled=true`, `speaker_count=2`,
+  - `3 person` -> `diarization_enabled=true`, `speaker_count=3`.
+- Realtime ASR request behavior is unchanged and remains display-focused.
 
 ## Title Generation Rule
 - Fallback title is available immediately at finalize:

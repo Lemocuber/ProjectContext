@@ -21,6 +21,11 @@ Extend v0 capture into a review-and-export workflow with a strict two-stage tran
   - discard recording (two-tap confirmation),
   - continue to finalize (existing pipeline).
 - Run file ASR recognition only after explicit continue on the post-record decision state.
+- Add a pre-record speaker-mode select in the highlight-button slot with options:
+  - `auto decide` (default),
+  - `1 person (no diarization)`,
+  - `2 person`,
+  - `3 person`.
 - Build finalized sentence structure (timestamps + optional speaker labels) from file ASR results.
 - Anchor highlights to finalized sentence lines using file ASR timestamps.
 - Generate markdown transcript from finalized sentence structure.
@@ -50,9 +55,14 @@ Extend v0 capture into a review-and-export workflow with a strict two-stage tran
 ## UX Requirements
 - Record flow remains primary; record control uses start/stop icons.
 - Highlight action is single tap while recording.
+- Before recording starts, show a speaker-mode select in the highlight-action position.
+- Speaker-mode option row uses number + person icon cues:
+  - single-person icon for `1 person`,
+  - multi-person icon for `2 person`, `3 person`, and `auto decide`.
 - After stop, replace highlight action area with split post-record controls:
   - left secondary discard icon button (narrower),
   - right primary continue icon button (wider).
+- Speaker-mode selection applies to post-record file ASR parameters only (not realtime display ASR).
 - Discard requires two taps:
   - first tap arms confirmation and switches icon to an "are you sure" state,
   - second tap confirms discard.

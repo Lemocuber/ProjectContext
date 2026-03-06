@@ -29,6 +29,8 @@ type RawSentenceLike = {
   speakerLabel?: string;
 };
 
+export type FinalPassSpeakerMode = 'auto' | 'one' | 'two' | 'three';
+
 export class FinalPassError extends Error {
   reason: FinalPassFailureReason;
 
@@ -234,7 +236,17 @@ async function submitRecordedRecognitionTask(params: {
   apiKey: string;
   sourceAudioRemoteUrl: string;
   vocabularyId?: string;
+  speakerMode?: FinalPassSpeakerMode;
 }): Promise<string> {
+  const diarizationParams =
+    params.speakerMode === 'one'
+      ? { diarization_enabled: false }
+      : params.speakerMode === 'two'
+        ? { diarization_enabled: true, speaker_count: 2 }
+        : params.speakerMode === 'three'
+          ? { diarization_enabled: true, speaker_count: 3 }
+          : { diarization_enabled: true };
+
   const response = await fetch(DASHSCOPE_RECORDED_RECOGNITION_URL, {
     method: 'POST',
     headers: {
@@ -248,7 +260,7 @@ async function submitRecordedRecognitionTask(params: {
         file_urls: [params.sourceAudioRemoteUrl],
       },
       parameters: {
-        diarization_enabled: true,
+        ...diarizationParams,
         ...(params.vocabularyId?.trim() ? { vocabulary_id: params.vocabularyId.trim() } : {}),
       },
     }),
@@ -334,12 +346,14 @@ export async function runDashScopeRecordedFinalPass(params: {
   sourceAudioRemoteUrl: string;
   timeoutMs: number;
   vocabularyId?: string;
+  speakerMode?: FinalPassSpeakerMode;
   onStatus?: (message: string) => void;
 }): Promise<{ taskId: string; finalizedSentences: FinalizedSentence[]; transcriptText: string }> {
   const taskId = await submitRecordedRecognitionTask({
     apiKey: params.apiKey,
     sourceAudioRemoteUrl: params.sourceAudioRemoteUrl,
     vocabularyId: params.vocabularyId,
+    speakerMode: params.speakerMode,
   });
   params.onStatus?.('Final-pass recognition started.');
 

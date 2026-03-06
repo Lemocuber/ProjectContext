@@ -29,6 +29,7 @@
 - Add COS staging path (BYOK upload) for recorded audio.
 - Add file ASR submission and async task polling after recording stops.
 - Add speaker diarization in finalized transcript structure from file ASR output.
+- Add pre-record speaker-mode selector and map options to final-pass diarization parameters.
 - Expose vocabulary configuration UI in Settings (multiline textarea, one term per line).
 - Sync textarea terms to customization API (`create_vocabulary`/`update_vocabulary`) and apply internal `vocabulary_id` to recognition requests.
 - Persist speaker-attributed transcript and vocabulary metadata in history item.
@@ -65,6 +66,8 @@
   - COS staging path works (upload mode)
   - signed URL expiry/fetch failure path is handled safely
   - file ASR final pass status transitions are visible (`pending` -> `completed|failed`)
+  - idle-state speaker-mode selector shows `auto`, `1 person (no diarization)`, `2 person`, `3 person` with number/person icon cues
+  - selected speaker mode maps correctly to final-pass request parameters (`diarization_enabled`, optional `speaker_count`)
   - session appears in History with speaker-attributed transcript when final pass succeeds
   - session fallback transcript remains usable when final pass fails
   - fallback title appears, then LLM title replacement status is handled correctly
