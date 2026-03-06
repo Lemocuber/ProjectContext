@@ -1,4 +1,5 @@
-import rawConfig from '../../assets/config.json';
+import { Asset } from 'expo-asset';
+import { File } from 'expo-file-system';
 import { syncDashScopeVocabulary } from '../services/vocabulary/dashscopeVocabularyService';
 import { prepareVocabulary } from '../services/vocabulary/vocabularyUtils';
 import {
@@ -53,6 +54,13 @@ type ParsedDefaults = {
   vocabularyTerms?: string[];
   vocabularyRawText?: string;
   internal: InternalRuntimeSettings;
+};
+
+type HiddenSettingsSections = {
+  dashscope: boolean;
+  deepseek: boolean;
+  tencentCos: boolean;
+  vocabulary: boolean;
 };
 
 const DEFAULT_INTERNAL: InternalRuntimeSettings = {
@@ -138,8 +146,29 @@ function parseDefaults(input: unknown): ParsedDefaults {
     internal: parseInternal(config),
   };
 }
+let defaultsPromise: Promise<ParsedDefaults> | undefined;
 
-const defaults = parseDefaults(rawConfig);
+async function loadConfigAssetJson(): Promise<unknown> {
+  try {
+    const moduleId = require('../../assets/ProjectContext.config.txt');
+    const asset = Asset.fromModule(moduleId);
+    if (!asset.localUri) {
+      await asset.downloadAsync();
+    }
+    if (!asset.localUri) return {};
+    const raw = await new File(asset.localUri).text();
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
+async function loadDefaults(): Promise<ParsedDefaults> {
+  if (!defaultsPromise) {
+    defaultsPromise = (async () => parseDefaults(await loadConfigAssetJson()))();
+  }
+  return defaultsPromise;
+}
 
 function sameTerms(left: string[], right: string[]): boolean {
   if (left.length !== right.length) return false;
@@ -149,12 +178,8 @@ function sameTerms(left: string[], right: string[]): boolean {
   return true;
 }
 
-export function getHiddenSettingsSections(): {
-  dashscope: boolean;
-  deepseek: boolean;
-  tencentCos: boolean;
-  vocabulary: boolean;
-} {
+export async function getHiddenSettingsSections(): Promise<HiddenSettingsSections> {
+  const defaults = await loadDefaults();
   return {
     dashscope: !!defaults.dashscopeKey,
     deepseek: !!defaults.deepseekKey,
@@ -163,31 +188,36 @@ export function getHiddenSettingsSections(): {
   };
 }
 
-export function shouldHideSettingsTab(): boolean {
-  const sections = getHiddenSettingsSections();
+export async function shouldHideSettingsTab(): Promise<boolean> {
+  const sections = await getHiddenSettingsSections();
   return sections.dashscope && sections.deepseek && sections.tencentCos && sections.vocabulary;
 }
 
-export function getInternalRuntimeSettings(): InternalRuntimeSettings {
+export async function getInternalRuntimeSettings(): Promise<InternalRuntimeSettings> {
+  const defaults = await loadDefaults();
   return defaults.internal;
 }
 
 export async function loadEffectiveDashScopeApiKey(): Promise<string | null> {
+  const defaults = await loadDefaults();
   if (defaults.dashscopeKey) return defaults.dashscopeKey;
   return loadStoredApiKey();
 }
 
 export async function loadEffectiveDeepSeekApiKey(): Promise<string | null> {
+  const defaults = await loadDefaults();
   if (defaults.deepseekKey) return defaults.deepseekKey;
   return loadStoredDeepSeekApiKey();
 }
 
 export async function loadEffectiveCosSettings(): Promise<CosSettings> {
+  const defaults = await loadDefaults();
   if (defaults.tencentCos) return defaults.tencentCos;
   return loadStoredCosSettings();
 }
 
 export async function loadEffectiveVocabularySettings(): Promise<VocabularySettings> {
+  const defaults = await loadDefaults();
   if (!defaults.vocabularyTerms?.length || !defaults.vocabularyRawText) {
     return loadStoredVocabularySettings();
   }

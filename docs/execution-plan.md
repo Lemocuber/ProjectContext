@@ -32,7 +32,7 @@
 - Expose vocabulary configuration UI in Settings (multiline textarea, one term per line).
 - Sync textarea terms to customization API (`create_vocabulary`/`update_vocabulary`) and apply internal `vocabulary_id` to recognition requests.
 - Persist speaker-attributed transcript and vocabulary metadata in history item.
-- Add build-time settings defaults from bundled `assets/config.json`:
+- Add build-time settings defaults from bundled `assets/ProjectContext.config.txt`:
   - hide complete sections from Settings,
   - discard incomplete sections,
   - hide Settings tab when all four sections are complete.

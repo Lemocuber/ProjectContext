@@ -16,4 +16,4 @@ This directory tracks product definition, technical specs, implementation notes,
 - Prefer concise docs tied to concrete milestones.
 
 ## Current Global Note
-- V1 launch builds support app-bundled default settings via `mobile/assets/config.json` with section-level hide/discard behavior.
+- V1 launch builds support app-bundled default settings via `mobile/assets/ProjectContext.config.txt` (JSON payload in text asset) with section-level hide/discard behavior.

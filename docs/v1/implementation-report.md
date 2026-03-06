@@ -30,7 +30,7 @@ V1 code was migrated to the corrected architecture where final transcript metada
 - History/detail updates:
   - surfaced final-pass status and failure reason in session details.
 - Default settings and Settings UX updates:
-  - added `mobile/assets/config.json` preload contract with lowercase keys (`dashscopeKey`, `deepseekKey`),
+  - added `mobile/assets/ProjectContext.config.txt` preload contract with lowercase keys (`dashscopeKey`, `deepseekKey`),
   - added section-level validation/discard behavior (invalid or partial section ignored),
   - hidden settings sections when complete defaults are present,
   - hidden Settings tab when all four sections are prefilled,
@@ -57,6 +57,7 @@ V1 code was migrated to the corrected architecture where final transcript metada
   - auto-scroll only when near bottom,
   - pause on user scroll-away,
   - resume automatically after >15s user scroll inactivity.
+- Renamed default settings bundle asset to `mobile/assets/ProjectContext.config.txt` and switched runtime loading to parse JSON from bundled text asset.
 
 ## Validation Snapshot
 - `npm run typecheck` in `mobile/`: passed after record-screen UI tweak pass.

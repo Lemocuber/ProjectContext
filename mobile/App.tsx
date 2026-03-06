@@ -9,17 +9,27 @@ import { colors } from './src/theme';
 
 type Tab = 'record' | 'history' | 'settings';
 
-const settingsTabHidden = shouldHideSettingsTab();
-
 export default function App() {
   const [tab, setTab] = useState<Tab>('record');
   const [historyRefreshToken, setHistoryRefreshToken] = useState(0);
+  const [settingsTabHidden, setSettingsTabHidden] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const hidden = await shouldHideSettingsTab();
+      if (alive) setSettingsTabHidden(hidden);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (settingsTabHidden && tab === 'settings') {
       setTab('record');
     }
-  }, [tab]);
+  }, [settingsTabHidden, tab]);
 
   const handleHistoryUpdated = useCallback(() => {
     setHistoryRefreshToken((value) => value + 1);

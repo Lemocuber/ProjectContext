@@ -4,7 +4,7 @@ Date: 2026-03-06
 
 ## Scope Additions Over V0
 - Highlight tap capture and sentence-level transcript anchoring.
-- Build-time default settings asset contract (`mobile/assets/config.json`) with section-level preload and UI-hiding.
+- Build-time default settings asset contract (`mobile/assets/ProjectContext.config.txt`, JSON payload) with section-level preload and UI-hiding.
 - Post-record file ASR final pass as the source of truth for:
   - sentence timestamps,
   - speaker diarization labels,
@@ -59,7 +59,7 @@ Date: 2026-03-06
   - no backward compatibility/migration from v0 persisted session shape is required.
 
 ## Default Settings Asset Contract (V1 Launch)
-- App bundle includes `mobile/assets/config.json`.
+- App bundle includes `mobile/assets/ProjectContext.config.txt` (UTF-8 text asset with a JSON object payload).
 - Supported keys:
   - `dashscopeKey: string`,
   - `deepseekKey: string`,
@@ -130,7 +130,7 @@ Date: 2026-03-06
 
 ## Zero-Backend COS BYOK Mode (Locked)
 - v1 supports a zero-backend storage staging mode via Tencent COS.
-- User provides BYOK COS configuration in Settings unless prefilled in `assets/config.json`.
+- User provides BYOK COS configuration in Settings unless prefilled in `assets/ProjectContext.config.txt`.
 - Ingestion path:
   - app upload path only: app uploads recorded audio to COS and generates a signed GET URL.
 - URL contract for file ASR submission:

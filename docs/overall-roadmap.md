@@ -26,7 +26,7 @@ Project Context starts as an Android-first voice capture tool with real-time tra
 - Add speaker diarization in finalized transcript output from file ASR only.
 - Add custom vocabulary textarea UI (one term per line), sync to vocabulary service, and apply internal `vocabulary_id` to recognition requests.
 - Support zero-backend COS staging (BYOK upload) for post-record file ASR.
-- Support build-time default settings preload from bundled `assets/config.json` with section-level hide/discard behavior.
+- Support build-time default settings preload from bundled `assets/ProjectContext.config.txt` with section-level hide/discard behavior.
 
 ### Phase 3: V1 Title and Export (Planned)
 - Add LLM-generated session title after finalization.
