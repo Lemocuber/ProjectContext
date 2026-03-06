@@ -4,6 +4,7 @@ Date: 2026-03-06
 
 ## Scope Additions Over V0
 - Highlight tap capture and sentence-level transcript anchoring.
+- Build-time default settings asset contract (`mobile/assets/config.json`) with section-level preload and UI-hiding.
 - Post-record file ASR final pass as the source of truth for:
   - sentence timestamps,
   - speaker diarization labels,
@@ -57,6 +58,29 @@ Date: 2026-03-06
   - v1 remains on `session_history_v2`,
   - no backward compatibility/migration from v0 persisted session shape is required.
 
+## Default Settings Asset Contract (V1 Launch)
+- App bundle includes `mobile/assets/config.json`.
+- Supported keys:
+  - `dashscopeKey: string`,
+  - `deepseekKey: string`,
+  - `tencentCos: { bucketId, bucketRegion, secretId, secretKey }`,
+  - `vocabulary: string[]`,
+  - `internal: { signedUrlTtl, finalPassTimeout, cosCleanupEnabled }`.
+- Section completeness/discard:
+  - DashScope section is valid only when `dashscopeKey` is non-empty and key-format valid.
+  - DeepSeek section is valid only when `deepseekKey` is non-empty and key-format valid.
+  - Tencent COS section is valid only when all 4 required fields are non-empty and valid.
+  - Vocabulary section is valid only when parsed vocabulary terms are non-empty and valid.
+  - Any incomplete/invalid section is discarded completely.
+- UI behavior:
+  - A valid section is hidden from Settings and used as runtime source of truth.
+  - If all four user-facing sections are valid, the Settings tab is hidden.
+- Internal runtime policy:
+  - `internal.signedUrlTtl` is in seconds.
+  - `internal.finalPassTimeout` is in seconds.
+  - `internal.cosCleanupEnabled` toggles best-effort COS object cleanup.
+  - Internal section has no user-facing Settings UI.
+
 ## Recording and Finalization Pipeline
 1. Start recording and realtime ASR stream for live transcript UX.
 2. Capture highlight taps as `tapMs` while recording.
@@ -80,7 +104,7 @@ Date: 2026-03-06
 
 ## Zero-Backend COS BYOK Mode (Locked)
 - v1 supports a zero-backend storage staging mode via Tencent COS.
-- User provides BYOK COS configuration in Settings.
+- User provides BYOK COS configuration in Settings unless prefilled in `assets/config.json`.
 - Ingestion path:
   - app upload path only: app uploads recorded audio to COS and generates a signed GET URL.
 - URL contract for file ASR submission:
@@ -90,9 +114,6 @@ Date: 2026-03-06
 - Initial recommended defaults:
   - presigned URL expiry: `>= 2 hours`,
   - final-pass timeout: `<= 30 minutes` per task.
-- If temporary credentials are used, effective URL validity is bounded by the shorter of:
-  - credential expiration,
-  - URL `Expires`.
 - For private buckets, use presigned GET URLs; avoid public-read as default.
 - Upload constraints:
   - single PUT supports up to 5GB,
@@ -103,20 +124,18 @@ Date: 2026-03-06
 
 ## BYOK Configuration Checklist (V1)
 - DashScope (required):
-  - `dashscopeApiKey` (used for realtime ASR, file ASR, vocabulary API).
+  - `dashscopeKey` (used for realtime ASR, file ASR, vocabulary API).
 - DeepSeek (optional but recommended):
-  - `deepseekApiKey` (used for async title generation).
+  - `deepseekKey` (used for async title generation).
 - COS upload fields (required for file-ASR source):
-  - `cosBucket` (BucketName-APPID),
-  - `cosRegion`,
-  - credentials:
-    - either permanent `secretId` + `secretKey`,
-    - or temporary `secretId` + `secretKey` + `sessionToken` + `credentialExpiresAt`,
-  - optional `cosKeyPrefix` for object organization.
+  - `bucketId` (BucketName-APPID),
+  - `bucketRegion`,
+  - `secretId`,
+  - `secretKey`.
 - Runtime policy knobs:
-  - `signedUrlExpiresSec` (recommended >= 7200),
-  - `finalPassTimeoutMs` (recommended <= 30 minutes),
-  - `cleanupEnabled` (best-effort delete after terminal state).
+  - `internal.signedUrlTtl` (seconds, recommended >= 7200),
+  - `internal.finalPassTimeout` (seconds, recommended <= 1800),
+  - `internal.cosCleanupEnabled` (best-effort delete after terminal state).
 
 ## Sentence Timestamp Rule (File ASR)
 - Finalized sentence timestamps must come from file ASR result payload.
@@ -181,7 +200,7 @@ Date: 2026-03-06
   - manual export can re-request permission and retry.
 
 ## Vocabulary Support
-- Settings UI remains:
+- Settings UI for vocabulary remains when section is not prefilled by config:
   - multiline textarea input (`one term per line`),
   - save/update action,
   - clear action to disable vocabulary injection.

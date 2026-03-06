@@ -29,6 +29,13 @@ V1 code was migrated to the corrected architecture where final transcript metada
   - title generation uses best available transcript source.
 - History/detail updates:
   - surfaced final-pass status and failure reason in session details.
+- Default settings and Settings UX updates:
+  - added `mobile/assets/config.json` preload contract with lowercase keys (`dashscopeKey`, `deepseekKey`),
+  - added section-level validation/discard behavior (invalid or partial section ignored),
+  - hidden settings sections when complete defaults are present,
+  - hidden Settings tab when all four sections are prefilled,
+  - removed optional COS user-edit fields from Settings (`session token`, `credential expiry`, `key prefix`, per-user TTL/timeout/cleanup),
+  - moved COS runtime policy knobs to `config.internal` (`signedUrlTtl`, `finalPassTimeout`, `cosCleanupEnabled`) with timeout in seconds.
 
 ## Root Cause Coverage
 - Root cause: finalized transcript metadata previously came from realtime ASR, which is insufficient for diarization.

@@ -14,3 +14,6 @@ This directory tracks product definition, technical specs, implementation notes,
 - Keep docs updated before and during implementation.
 - Capture decisions and tradeoffs explicitly.
 - Prefer concise docs tied to concrete milestones.
+
+## Current Global Note
+- V1 launch builds support app-bundled default settings via `mobile/assets/config.json` with section-level hide/discard behavior.

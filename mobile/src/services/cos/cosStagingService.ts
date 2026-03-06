@@ -14,38 +14,15 @@ function datePart(value: string): string {
   return date.toISOString().slice(0, 10);
 }
 
-function trimSlashes(value: string): string {
-  return value.replace(/^\/+|\/+$/g, '');
-}
-
-function buildObjectKey(prefix: string | undefined, sessionId: string, startedAt: string): string {
-  const stem = `${datePart(startedAt)}/${sessionId}.wav`;
-  const cleanPrefix = trimSlashes((prefix || '').trim());
-  return cleanPrefix ? `${cleanPrefix}/${stem}` : stem;
-}
-
-function parseTime(value: string | undefined): number | null {
-  const trimmed = (value || '').trim();
-  if (!trimmed) return null;
-  const parsed = Date.parse(trimmed);
-  if (Number.isNaN(parsed)) return null;
-  return parsed;
-}
-
-function assertCredentialWindow(settings: CosSettings): void {
-  const credentialExpiry = parseTime(settings.credentialExpiresAt);
-  if (credentialExpiry === null) return;
-
-  const requiredUntil = Date.now() + settings.finalPassTimeoutMs + 60_000;
-  if (credentialExpiry <= requiredUntil) {
-    throw new Error('COS temporary credentials expire before final-pass timeout window.');
-  }
+function buildObjectKey(sessionId: string, startedAt: string): string {
+  return `${datePart(startedAt)}/${sessionId}.wav`;
 }
 
 async function uploadToCos(params: {
   settings: CosSettings;
   objectKey: string;
   audioFileUri: string;
+  signedUrlTtlSec: number;
 }): Promise<void> {
   const uploadUrl = buildSignedCosUrl({
     method: 'PUT',
@@ -54,8 +31,7 @@ async function uploadToCos(params: {
     key: params.objectKey,
     secretId: params.settings.secretId,
     secretKey: params.settings.secretKey,
-    sessionToken: params.settings.sessionToken,
-    expiresSec: Math.min(params.settings.signedUrlExpiresSec, 900),
+    expiresSec: Math.min(params.signedUrlTtlSec, 900),
   });
 
   const file = new File(params.audioFileUri);
@@ -80,14 +56,15 @@ export async function stageAudioToCos(params: {
   sessionId: string;
   startedAt: string;
   audioFileUri: string;
+  signedUrlTtlSec: number;
 }): Promise<CosStagedAudio> {
-  assertCredentialWindow(params.settings);
-  const objectKey = buildObjectKey(params.settings.cosKeyPrefix, params.sessionId, params.startedAt);
+  const objectKey = buildObjectKey(params.sessionId, params.startedAt);
 
   await uploadToCos({
     settings: params.settings,
     objectKey,
     audioFileUri: params.audioFileUri,
+    signedUrlTtlSec: params.signedUrlTtlSec,
   });
 
   const sourceAudioRemoteUrl = buildSignedCosUrl({
@@ -97,8 +74,7 @@ export async function stageAudioToCos(params: {
     key: objectKey,
     secretId: params.settings.secretId,
     secretKey: params.settings.secretKey,
-    sessionToken: params.settings.sessionToken,
-    expiresSec: params.settings.signedUrlExpiresSec,
+    expiresSec: params.signedUrlTtlSec,
   });
   return { objectKey, sourceAudioRemoteUrl };
 }
@@ -118,7 +94,6 @@ export async function cleanupCosObjectBestEffort(params: {
       key: objectKey,
       secretId: params.settings.secretId,
       secretKey: params.settings.secretKey,
-      sessionToken: params.settings.sessionToken,
       expiresSec: 900,
     });
 
@@ -127,4 +102,3 @@ export async function cleanupCosObjectBestEffort(params: {
     // best effort cleanup
   }
 }
-

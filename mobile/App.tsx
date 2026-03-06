@@ -1,6 +1,7 @@
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { shouldHideSettingsTab } from './src/config/defaultSettingsConfig';
 import { HistoryScreen } from './src/screens/HistoryScreen';
 import { RecordScreen } from './src/screens/RecordScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
@@ -8,16 +9,24 @@ import { colors } from './src/theme';
 
 type Tab = 'record' | 'history' | 'settings';
 
+const settingsTabHidden = shouldHideSettingsTab();
+
 export default function App() {
   const [tab, setTab] = useState<Tab>('record');
   const [historyRefreshToken, setHistoryRefreshToken] = useState(0);
+
+  useEffect(() => {
+    if (settingsTabHidden && tab === 'settings') {
+      setTab('record');
+    }
+  }, [tab]);
 
   const handleHistoryUpdated = useCallback(() => {
     setHistoryRefreshToken((value) => value + 1);
   }, []);
 
   const body = useMemo(() => {
-    if (tab === 'settings') return <SettingsScreen />;
+    if (!settingsTabHidden && tab === 'settings') return <SettingsScreen />;
     if (tab === 'history') return <HistoryScreen refreshToken={historyRefreshToken} />;
     return <RecordScreen onHistoryUpdated={handleHistoryUpdated} />;
   }, [handleHistoryUpdated, historyRefreshToken, tab]);
@@ -42,12 +51,14 @@ export default function App() {
           >
             <Text style={[styles.tabLabel, tab === 'history' ? styles.tabLabelActive : null]}>History</Text>
           </Pressable>
-          <Pressable
-            onPress={() => setTab('settings')}
-            style={[styles.tabButton, tab === 'settings' ? styles.tabButtonActive : null]}
-          >
-            <Text style={[styles.tabLabel, tab === 'settings' ? styles.tabLabelActive : null]}>Settings</Text>
-          </Pressable>
+          {!settingsTabHidden ? (
+            <Pressable
+              onPress={() => setTab('settings')}
+              style={[styles.tabButton, tab === 'settings' ? styles.tabButtonActive : null]}
+            >
+              <Text style={[styles.tabLabel, tab === 'settings' ? styles.tabLabelActive : null]}>Settings</Text>
+            </Pressable>
+          ) : null}
         </View>
 
         {body}

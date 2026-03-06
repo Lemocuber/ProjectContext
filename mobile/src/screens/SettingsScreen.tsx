@@ -8,31 +8,34 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import {
+  getHiddenSettingsSections,
+  loadEffectiveCosSettings,
+  loadEffectiveDashScopeApiKey,
+  loadEffectiveDeepSeekApiKey,
+  loadEffectiveVocabularySettings,
+} from '../config/defaultSettingsConfig';
 import { syncDashScopeVocabulary, deleteDashScopeVocabulary } from '../services/vocabulary/dashscopeVocabularyService';
 import { prepareVocabulary } from '../services/vocabulary/vocabularyUtils';
 import {
   clearApiKey,
-  loadApiKey,
   looksLikeDashScopeApiKey,
   maskApiKey,
   saveApiKey,
 } from '../storage/apiKeyStore';
 import {
   clearDeepSeekApiKey,
-  loadDeepSeekApiKey,
   looksLikeDeepSeekApiKey,
   saveDeepSeekApiKey,
 } from '../storage/deepseekKeyStore';
 import {
   clearVocabularySettings,
-  loadVocabularySettings,
   saveVocabularySettings,
   type VocabularySyncStatus,
 } from '../storage/vocabularySettingsStore';
 import {
   clearCosSettings,
   hasCompleteCosSettings,
-  loadCosSettings,
   looksLikeCosBucket,
   looksLikeCosRegion,
   normalizeCosSettings,
@@ -40,6 +43,12 @@ import {
   type CosSettings,
 } from '../storage/cosSettingsStore';
 import { colors } from '../theme';
+
+const hiddenSections = getHiddenSettingsSections();
+const showDashScope = !hiddenSections.dashscope;
+const showDeepSeek = !hiddenSections.deepseek;
+const showTencentCos = !hiddenSections.tencentCos;
+const showVocabulary = !hiddenSections.vocabulary;
 
 export function SettingsScreen() {
   const [apiKey, setApiKey] = useState('');
@@ -56,30 +65,42 @@ export function SettingsScreen() {
   const [cosRegion, setCosRegion] = useState('');
   const [cosSecretId, setCosSecretId] = useState('');
   const [cosSecretKey, setCosSecretKey] = useState('');
-  const [cosSessionToken, setCosSessionToken] = useState('');
-  const [cosCredentialExpiresAt, setCosCredentialExpiresAt] = useState('');
-  const [cosKeyPrefix, setCosKeyPrefix] = useState('');
-  const [cosSignedUrlExpiresSec, setCosSignedUrlExpiresSec] = useState('7200');
-  const [cosFinalPassTimeoutMs, setCosFinalPassTimeoutMs] = useState('1800000');
-  const [cosCleanupEnabled, setCosCleanupEnabled] = useState(true);
 
   useEffect(() => {
     void (async () => {
       const [dashScopeKey, deepSeekKey, vocabularySettings, cosSettings] = await Promise.all([
-        loadApiKey(),
-        loadDeepSeekApiKey(),
-        loadVocabularySettings(),
-        loadCosSettings(),
+        showDashScope ? loadEffectiveDashScopeApiKey() : Promise.resolve<string | null>(null),
+        showDeepSeek ? loadEffectiveDeepSeekApiKey() : Promise.resolve<string | null>(null),
+        showVocabulary
+          ? loadEffectiveVocabularySettings()
+          : Promise.resolve({
+              rawText: '',
+              terms: [],
+              vocabularyId: undefined,
+              syncStatus: 'idle' as const,
+            }),
+        showTencentCos
+          ? loadEffectiveCosSettings()
+          : Promise.resolve({
+              cosBucket: '',
+              cosRegion: '',
+              secretId: '',
+              secretKey: '',
+            }),
       ]);
 
       if (dashScopeKey) setSavedMask(maskApiKey(dashScopeKey));
       if (deepSeekKey) setSavedDeepSeekMask(maskApiKey(deepSeekKey));
 
-      setVocabularyText(vocabularySettings.rawText);
-      setVocabularyId(vocabularySettings.vocabularyId);
-      setVocabularySyncStatus(vocabularySettings.syncStatus || 'idle');
-      setVocabularyCount(vocabularySettings.terms.length);
-      hydrateCosSettings(cosSettings);
+      if (showVocabulary) {
+        setVocabularyText(vocabularySettings.rawText);
+        setVocabularyId(vocabularySettings.vocabularyId);
+        setVocabularySyncStatus(vocabularySettings.syncStatus || 'idle');
+        setVocabularyCount(vocabularySettings.terms.length);
+      }
+      if (showTencentCos) {
+        hydrateCosSettings(cosSettings);
+      }
     })();
   }, []);
 
@@ -88,12 +109,6 @@ export function SettingsScreen() {
     setCosRegion(settings.cosRegion);
     setCosSecretId(settings.secretId);
     setCosSecretKey(settings.secretKey);
-    setCosSessionToken(settings.sessionToken || '');
-    setCosCredentialExpiresAt(settings.credentialExpiresAt || '');
-    setCosKeyPrefix(settings.cosKeyPrefix || '');
-    setCosSignedUrlExpiresSec(String(settings.signedUrlExpiresSec));
-    setCosFinalPassTimeoutMs(String(settings.finalPassTimeoutMs));
-    setCosCleanupEnabled(settings.cleanupEnabled);
   };
 
   const onSave = async () => {
@@ -144,7 +159,7 @@ export function SettingsScreen() {
       return;
     }
 
-    const dashScopeKey = await loadApiKey();
+    const dashScopeKey = await loadEffectiveDashScopeApiKey();
     if (!dashScopeKey) {
       setVocabularyError('Set DashScope API key before saving vocabulary.');
       return;
@@ -188,7 +203,7 @@ export function SettingsScreen() {
     setVocabularyBusy(true);
     setVocabularyError('');
     try {
-      const dashScopeKey = await loadApiKey();
+      const dashScopeKey = await loadEffectiveDashScopeApiKey();
       if (dashScopeKey && vocabularyId) {
         try {
           await deleteDashScopeVocabulary({
@@ -216,12 +231,6 @@ export function SettingsScreen() {
       cosRegion,
       secretId: cosSecretId,
       secretKey: cosSecretKey,
-      sessionToken: cosSessionToken,
-      credentialExpiresAt: cosCredentialExpiresAt,
-      cosKeyPrefix,
-      signedUrlExpiresSec: Number(cosSignedUrlExpiresSec),
-      finalPassTimeoutMs: Number(cosFinalPassTimeoutMs),
-      cleanupEnabled: cosCleanupEnabled,
     });
 
     if (!looksLikeCosBucket(normalized.cosBucket)) {
@@ -232,12 +241,8 @@ export function SettingsScreen() {
       Alert.alert('Invalid COS region', 'Use a region like ap-beijing.');
       return;
     }
-    if (!normalized.secretId || !normalized.secretKey) {
-      Alert.alert('Missing credentials', 'COS SecretId and SecretKey are required.');
-      return;
-    }
     if (!hasCompleteCosSettings(normalized)) {
-      Alert.alert('Invalid config', 'Credential expiry is invalid or already expired.');
+      Alert.alert('Missing credentials', 'COS SecretId and SecretKey are required.');
       return;
     }
 
@@ -248,208 +253,176 @@ export function SettingsScreen() {
 
   const onClearCos = async () => {
     await clearCosSettings();
-    hydrateCosSettings(await loadCosSettings());
+    hydrateCosSettings(await loadEffectiveCosSettings());
     Alert.alert('Cleared', 'COS settings removed.');
   };
 
+  if (!showDashScope && !showDeepSeek && !showTencentCos && !showVocabulary) {
+    return (
+      <ScrollView contentContainerStyle={styles.layout}>
+        <View style={styles.card}>
+          <Text style={styles.title}>Settings managed by config asset</Text>
+          <Text style={styles.description}>
+            All settings sections are prefilled in assets/config.json for this build.
+          </Text>
+        </View>
+      </ScrollView>
+    );
+  }
+
   return (
     <ScrollView contentContainerStyle={styles.layout}>
-      <View style={styles.card}>
-        <Text style={styles.title}>DashScope API Key</Text>
-        <Text style={styles.description}>
-          Bring your own key for realtime ASR and vocabulary API usage.
-        </Text>
-
-        <TextInput
-          autoCapitalize="none"
-          autoCorrect={false}
-          onChangeText={setApiKey}
-          placeholder="sk-..."
-          placeholderTextColor={colors.muted}
-          secureTextEntry
-          style={styles.input}
-          value={apiKey}
-        />
-
-        <View style={styles.row}>
-          <Pressable onPress={onSave} style={styles.primaryButton}>
-            <Text style={styles.primaryButtonText}>Save</Text>
-          </Pressable>
-          <Pressable onPress={onClear} style={styles.secondaryButton}>
-            <Text style={styles.secondaryButtonText}>Clear</Text>
-          </Pressable>
-        </View>
-
-        <Text style={styles.savedLabel}>Saved key: {savedMask || 'Not set'}</Text>
-      </View>
-
-      <View style={styles.card}>
-        <Text style={styles.title}>DeepSeek API Key</Text>
-        <Text style={styles.description}>
-          Used for async session title generation after finalize.
-        </Text>
-
-        <TextInput
-          autoCapitalize="none"
-          autoCorrect={false}
-          onChangeText={setDeepSeekApiKey}
-          placeholder="sk-..."
-          placeholderTextColor={colors.muted}
-          secureTextEntry
-          style={styles.input}
-          value={deepSeekApiKey}
-        />
-
-        <View style={styles.row}>
-          <Pressable onPress={onSaveDeepSeek} style={styles.primaryButton}>
-            <Text style={styles.primaryButtonText}>Save</Text>
-          </Pressable>
-          <Pressable onPress={onClearDeepSeek} style={styles.secondaryButton}>
-            <Text style={styles.secondaryButtonText}>Clear</Text>
-          </Pressable>
-        </View>
-
-        <Text style={styles.savedLabel}>Saved key: {savedDeepSeekMask || 'Not set'}</Text>
-      </View>
-
-      <View style={styles.card}>
-        <Text style={styles.title}>Tencent COS (BYOK)</Text>
-        <Text style={styles.description}>
-          Used to stage audio for file ASR final-pass in zero-backend mode.
-        </Text>
-
-        <TextInput
-          autoCapitalize="none"
-          autoCorrect={false}
-          onChangeText={setCosBucket}
-          placeholder="bucket-name-1250000000"
-          placeholderTextColor={colors.muted}
-          style={styles.input}
-          value={cosBucket}
-        />
-        <TextInput
-          autoCapitalize="none"
-          autoCorrect={false}
-          onChangeText={setCosRegion}
-          placeholder="ap-beijing"
-          placeholderTextColor={colors.muted}
-          style={styles.input}
-          value={cosRegion}
-        />
-        <TextInput
-          autoCapitalize="none"
-          autoCorrect={false}
-          onChangeText={setCosSecretId}
-          placeholder="SecretId"
-          placeholderTextColor={colors.muted}
-          style={styles.input}
-          value={cosSecretId}
-        />
-        <TextInput
-          autoCapitalize="none"
-          autoCorrect={false}
-          onChangeText={setCosSecretKey}
-          placeholder="SecretKey"
-          placeholderTextColor={colors.muted}
-          secureTextEntry
-          style={styles.input}
-          value={cosSecretKey}
-        />
-        <TextInput
-          autoCapitalize="none"
-          autoCorrect={false}
-          onChangeText={setCosSessionToken}
-          placeholder="SessionToken (optional)"
-          placeholderTextColor={colors.muted}
-          style={styles.input}
-          value={cosSessionToken}
-        />
-        <TextInput
-          autoCapitalize="none"
-          autoCorrect={false}
-          onChangeText={setCosCredentialExpiresAt}
-          placeholder="Credential expires at ISO8601 (optional)"
-          placeholderTextColor={colors.muted}
-          style={styles.input}
-          value={cosCredentialExpiresAt}
-        />
-        <TextInput
-          autoCapitalize="none"
-          autoCorrect={false}
-          onChangeText={setCosKeyPrefix}
-          placeholder="Key prefix (optional)"
-          placeholderTextColor={colors.muted}
-          style={styles.input}
-          value={cosKeyPrefix}
-        />
-        <TextInput
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="numeric"
-          onChangeText={setCosSignedUrlExpiresSec}
-          placeholder="Signed URL expiry seconds (default 7200)"
-          placeholderTextColor={colors.muted}
-          style={styles.input}
-          value={cosSignedUrlExpiresSec}
-        />
-        <TextInput
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="numeric"
-          onChangeText={setCosFinalPassTimeoutMs}
-          placeholder="Final pass timeout ms (default 1800000)"
-          placeholderTextColor={colors.muted}
-          style={styles.input}
-          value={cosFinalPassTimeoutMs}
-        />
-
-        <Pressable onPress={() => setCosCleanupEnabled((value) => !value)} style={styles.switchButton}>
-          <Text style={styles.switchButtonText}>
-            Cleanup staged audio after terminal state: {cosCleanupEnabled ? 'ON' : 'OFF'}
+      {showDashScope ? (
+        <View style={styles.card}>
+          <Text style={styles.title}>DashScope API Key</Text>
+          <Text style={styles.description}>
+            Bring your own key for realtime ASR and vocabulary API usage.
           </Text>
-        </Pressable>
 
-        <View style={styles.row}>
-          <Pressable onPress={onSaveCos} style={styles.primaryButton}>
-            <Text style={styles.primaryButtonText}>Save</Text>
-          </Pressable>
-          <Pressable onPress={onClearCos} style={styles.secondaryButton}>
-            <Text style={styles.secondaryButtonText}>Clear</Text>
-          </Pressable>
+          <TextInput
+            autoCapitalize="none"
+            autoCorrect={false}
+            onChangeText={setApiKey}
+            placeholder="sk-..."
+            placeholderTextColor={colors.muted}
+            secureTextEntry
+            style={styles.input}
+            value={apiKey}
+          />
+
+          <View style={styles.row}>
+            <Pressable onPress={onSave} style={styles.primaryButton}>
+              <Text style={styles.primaryButtonText}>Save</Text>
+            </Pressable>
+            <Pressable onPress={onClear} style={styles.secondaryButton}>
+              <Text style={styles.secondaryButtonText}>Clear</Text>
+            </Pressable>
+          </View>
+
+          <Text style={styles.savedLabel}>Saved key: {savedMask || 'Not set'}</Text>
         </View>
-      </View>
+      ) : null}
 
-      <View style={styles.card}>
-        <Text style={styles.title}>Vocabulary</Text>
-        <Text style={styles.description}>
-          One term per line. Saved vocabulary applies globally to new recordings.
-        </Text>
+      {showDeepSeek ? (
+        <View style={styles.card}>
+          <Text style={styles.title}>DeepSeek API Key</Text>
+          <Text style={styles.description}>
+            Used for async session title generation after finalize.
+          </Text>
 
-        <TextInput
-          autoCapitalize="none"
-          autoCorrect={false}
-          multiline
-          onChangeText={setVocabularyText}
-          placeholder="one term per line"
-          placeholderTextColor={colors.muted}
-          style={styles.textarea}
-          textAlignVertical="top"
-          value={vocabularyText}
-        />
+          <TextInput
+            autoCapitalize="none"
+            autoCorrect={false}
+            onChangeText={setDeepSeekApiKey}
+            placeholder="sk-..."
+            placeholderTextColor={colors.muted}
+            secureTextEntry
+            style={styles.input}
+            value={deepSeekApiKey}
+          />
 
-        <View style={styles.row}>
-          <Pressable disabled={vocabularyBusy} onPress={onSaveVocabulary} style={styles.primaryButton}>
-            <Text style={styles.primaryButtonText}>{vocabularyBusy ? 'Saving...' : 'Save / Update'}</Text>
-          </Pressable>
-          <Pressable disabled={vocabularyBusy} onPress={onClearVocabulary} style={styles.secondaryButton}>
-            <Text style={styles.secondaryButtonText}>Clear</Text>
-          </Pressable>
+          <View style={styles.row}>
+            <Pressable onPress={onSaveDeepSeek} style={styles.primaryButton}>
+              <Text style={styles.primaryButtonText}>Save</Text>
+            </Pressable>
+            <Pressable onPress={onClearDeepSeek} style={styles.secondaryButton}>
+              <Text style={styles.secondaryButtonText}>Clear</Text>
+            </Pressable>
+          </View>
+
+          <Text style={styles.savedLabel}>Saved key: {savedDeepSeekMask || 'Not set'}</Text>
         </View>
+      ) : null}
 
-        <Text style={styles.savedLabel}>Terms: {vocabularyCount}</Text>
-        <Text style={styles.savedLabel}>Sync: {vocabularySyncStatus}</Text>
-        {vocabularyError ? <Text style={styles.errorText}>{vocabularyError}</Text> : null}
-      </View>
+      {showTencentCos ? (
+        <View style={styles.card}>
+          <Text style={styles.title}>Tencent COS (BYOK)</Text>
+          <Text style={styles.description}>
+            Used to stage audio for file ASR final-pass in zero-backend mode.
+          </Text>
+
+          <TextInput
+            autoCapitalize="none"
+            autoCorrect={false}
+            onChangeText={setCosBucket}
+            placeholder="bucket-name-1250000000"
+            placeholderTextColor={colors.muted}
+            style={styles.input}
+            value={cosBucket}
+          />
+          <TextInput
+            autoCapitalize="none"
+            autoCorrect={false}
+            onChangeText={setCosRegion}
+            placeholder="ap-beijing"
+            placeholderTextColor={colors.muted}
+            style={styles.input}
+            value={cosRegion}
+          />
+          <TextInput
+            autoCapitalize="none"
+            autoCorrect={false}
+            onChangeText={setCosSecretId}
+            placeholder="SecretId"
+            placeholderTextColor={colors.muted}
+            style={styles.input}
+            value={cosSecretId}
+          />
+          <TextInput
+            autoCapitalize="none"
+            autoCorrect={false}
+            onChangeText={setCosSecretKey}
+            placeholder="SecretKey"
+            placeholderTextColor={colors.muted}
+            secureTextEntry
+            style={styles.input}
+            value={cosSecretKey}
+          />
+
+          <View style={styles.row}>
+            <Pressable onPress={onSaveCos} style={styles.primaryButton}>
+              <Text style={styles.primaryButtonText}>Save</Text>
+            </Pressable>
+            <Pressable onPress={onClearCos} style={styles.secondaryButton}>
+              <Text style={styles.secondaryButtonText}>Clear</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
+
+      {showVocabulary ? (
+        <View style={styles.card}>
+          <Text style={styles.title}>Vocabulary</Text>
+          <Text style={styles.description}>
+            One term per line. Saved vocabulary applies globally to new recordings.
+          </Text>
+
+          <TextInput
+            autoCapitalize="none"
+            autoCorrect={false}
+            multiline
+            onChangeText={setVocabularyText}
+            placeholder="one term per line"
+            placeholderTextColor={colors.muted}
+            style={styles.textarea}
+            textAlignVertical="top"
+            value={vocabularyText}
+          />
+
+          <View style={styles.row}>
+            <Pressable disabled={vocabularyBusy} onPress={onSaveVocabulary} style={styles.primaryButton}>
+              <Text style={styles.primaryButtonText}>{vocabularyBusy ? 'Saving...' : 'Save / Update'}</Text>
+            </Pressable>
+            <Pressable disabled={vocabularyBusy} onPress={onClearVocabulary} style={styles.secondaryButton}>
+              <Text style={styles.secondaryButtonText}>Clear</Text>
+            </Pressable>
+          </View>
+
+          <Text style={styles.savedLabel}>Terms: {vocabularyCount}</Text>
+          <Text style={styles.savedLabel}>Sync: {vocabularySyncStatus}</Text>
+          {vocabularyError ? <Text style={styles.errorText}>{vocabularyError}</Text> : null}
+        </View>
+      ) : null}
     </ScrollView>
   );
 }
@@ -526,18 +499,6 @@ const styles = StyleSheet.create({
   secondaryButtonText: {
     color: colors.ink,
     fontWeight: '700',
-  },
-  switchButton: {
-    alignItems: 'center',
-    borderColor: colors.border,
-    borderRadius: 10,
-    borderWidth: 1,
-    marginTop: 14,
-    paddingVertical: 12,
-  },
-  switchButtonText: {
-    color: colors.ink,
-    fontWeight: '600',
   },
   savedLabel: {
     color: colors.muted,

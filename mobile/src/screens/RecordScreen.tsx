@@ -4,6 +4,13 @@ import {
   FinalPassError,
   runDashScopeRecordedFinalPass,
 } from '../services/asr/dashscopeRecordedRecognition';
+import {
+  getInternalRuntimeSettings,
+  loadEffectiveCosSettings,
+  loadEffectiveDashScopeApiKey,
+  loadEffectiveDeepSeekApiKey,
+  loadEffectiveVocabularySettings,
+} from '../config/defaultSettingsConfig';
 import { dashscopeRealtimeSessionService } from '../services/asr/dashscopeRealtimeSession';
 import type { AsrSession, RecordingStatus } from '../services/asr/types';
 import { cleanupCosObjectBestEffort, stageAudioToCos } from '../services/cos/cosStagingService';
@@ -19,18 +26,11 @@ import {
   buildTranscriptMarkdown,
   saveTranscriptMarkdown,
 } from '../services/transcript/transcriptMarkdown';
-import { loadApiKey } from '../storage/apiKeyStore';
-import {
-  hasCompleteCosSettings,
-  isCosCredentialLikelyExpired,
-  loadCosSettings,
-} from '../storage/cosSettingsStore';
-import { loadDeepSeekApiKey } from '../storage/deepseekKeyStore';
+import { hasCompleteCosSettings } from '../storage/cosSettingsStore';
 import {
   appendSessionHistory,
   updateSessionHistoryItem,
 } from '../storage/sessionHistoryStore';
-import { loadVocabularySettings } from '../storage/vocabularySettingsStore';
 import type { AsrEvent } from '../services/asr/types';
 import type { FinalPassFailureReason, FinalizedSentence } from '../types/session';
 import type { SessionHistoryItem } from '../types/session';
@@ -119,22 +119,18 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
     const startedAt = startAtRef.current;
     const endedAt = new Date().toISOString();
     const fallbackTitle = buildFallbackTitle(startedAt);
-    const deepSeekApiKey = (await loadDeepSeekApiKey())?.trim() || '';
+    const deepSeekApiKey = (await loadEffectiveDeepSeekApiKey())?.trim() || '';
     const hasDeepSeekKey = !!deepSeekApiKey;
     const realtimeTranscriptRaw = event.text.trim();
-    const cosSettings = await loadCosSettings();
+    const cosSettings = await loadEffectiveCosSettings();
+    const internalRuntimeSettings = getInternalRuntimeSettings();
     const cosConfigured = hasCompleteCosSettings(cosSettings);
-    const cosLikelyExpired = isCosCredentialLikelyExpired(cosSettings.credentialExpiresAt);
-    const canRunFinalPass = !!event.audioFileUri && cosConfigured && !cosLikelyExpired;
+    const canRunFinalPass = !!event.audioFileUri && cosConfigured;
 
     let finalPassStatus: 'pending' | 'completed' | 'failed' = canRunFinalPass ? 'pending' : 'failed';
     let finalPassFailureReason: FinalPassFailureReason | undefined;
     if (!canRunFinalPass) {
-      finalPassFailureReason = !event.audioFileUri
-        ? 'upload_failed'
-        : cosLikelyExpired
-          ? 'url_expired'
-          : 'unknown';
+      finalPassFailureReason = !event.audioFileUri ? 'upload_failed' : 'unknown';
     }
     let finalPassTaskId: string | undefined;
     let sourceAudioRemoteUrl: string | undefined;
@@ -169,6 +165,7 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
           sessionId: sessionIdRef.current,
           startedAt,
           audioFileUri: event.audioFileUri,
+          signedUrlTtlSec: internalRuntimeSettings.signedUrlTtlSec,
         });
         sourceAudioRemoteUrl = stagedAudio.sourceAudioRemoteUrl;
         sourceAudioObjectKey = stagedAudio.objectKey;
@@ -180,9 +177,9 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
         onHistoryUpdated?.();
 
         const finalPassResult = await runDashScopeRecordedFinalPass({
-          apiKey: (await loadApiKey()) || '',
+          apiKey: (await loadEffectiveDashScopeApiKey()) || '',
           sourceAudioRemoteUrl,
-          timeoutMs: cosSettings.finalPassTimeoutMs,
+          timeoutMs: internalRuntimeSettings.finalPassTimeoutSec * 1000,
           vocabularyId: appliedVocabularyIdRef.current,
           onStatus: (message) => setInfoText(message),
         });
@@ -204,7 +201,7 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
         finalizedSentences = [];
         bestTranscriptText = realtimeTranscriptRaw;
       } finally {
-        if (cosSettings.cleanupEnabled) {
+        if (internalRuntimeSettings.cosCleanupEnabled) {
           await cleanupCosObjectBestEffort({
             settings: cosSettings,
             objectKey: sourceAudioObjectKey,
@@ -280,7 +277,7 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
   const start = async () => {
     if (status === 'processing') return;
 
-    const apiKey = await loadApiKey();
+    const apiKey = await loadEffectiveDashScopeApiKey();
     if (!apiKey) {
       setStatus('failed');
       setErrorText('Set your API key in Settings before recording.');
@@ -301,7 +298,7 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
     appliedVocabularyIdRef.current = undefined;
     appliedVocabularyTermsRef.current = [];
 
-    const vocabularySettings = await loadVocabularySettings();
+    const vocabularySettings = await loadEffectiveVocabularySettings();
     const vocabularyId = vocabularySettings.syncStatus === 'failed' ? undefined : vocabularySettings.vocabularyId;
     if (vocabularyId) {
       appliedVocabularyIdRef.current = vocabularyId;

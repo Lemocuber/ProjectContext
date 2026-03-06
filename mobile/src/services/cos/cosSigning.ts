@@ -198,7 +198,6 @@ type SignedCosUrlParams = {
   secretId: string;
   secretKey: string;
   expiresSec: number;
-  sessionToken?: string;
   query?: Record<string, string>;
 };
 
@@ -212,9 +211,6 @@ export function buildSignedCosUrl(params: SignedCosUrlParams): string {
   const pathname = `/${normalizeObjectKey(params.key)}`;
 
   const queryParams: Record<string, string> = { ...(params.query || {}) };
-  if (params.sessionToken?.trim()) {
-    queryParams['x-cos-security-token'] = params.sessionToken.trim();
-  }
   const headers = { Host: host };
 
   const qHeaderList = getObjectKeys(headers, true).join(';').toLowerCase();

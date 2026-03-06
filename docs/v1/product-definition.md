@@ -14,6 +14,7 @@ Extend v0 capture into a review-and-export workflow with a strict two-stage tran
 
 ## In Scope
 - Live transcript remains raw/clean during recording.
+- Build-time default settings asset (`mobile/assets/config.json`) with section-level preload/discard behavior.
 - Persist raw realtime transcript (unprocessed) with the session.
 - Highlight marking during recording (single tap, timestamped as `tapMs`).
 - After stop/finalize, run file ASR recognition on recorded audio.
@@ -58,7 +59,9 @@ Extend v0 capture into a review-and-export workflow with a strict two-stage tran
   - success/error feedback for vocabulary sync.
 - Settings includes a COS configuration area (BYOK path):
   - input/update credentials,
-  - validation feedback for malformed config/expired signing setup.
+  - validation feedback for malformed config.
+- Any settings section fully provided by `assets/config.json` is hidden from Settings UI.
+- If all four sections are fully provided (`dashscope`, `deepseek`, `tencentCos`, `vocabulary`), the Settings tab is hidden.
 - Auto-export status to `Downloads` must provide clear success/failure feedback.
 - Auto-export flow provides toast feedback for success/failure.
 - Manual export remains available after failures and after app restart.

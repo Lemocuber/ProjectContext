@@ -32,6 +32,10 @@
 - Expose vocabulary configuration UI in Settings (multiline textarea, one term per line).
 - Sync textarea terms to customization API (`create_vocabulary`/`update_vocabulary`) and apply internal `vocabulary_id` to recognition requests.
 - Persist speaker-attributed transcript and vocabulary metadata in history item.
+- Add build-time settings defaults from bundled `assets/config.json`:
+  - hide complete sections from Settings,
+  - discard incomplete sections,
+  - hide Settings tab when all four sections are complete.
 - Status: implemented in code (COS staging + file ASR submit/poll/parse + status persistence); pending manual validation.
 
 ### 5) Workstream C: Transcript Artifact and Title (v1)
