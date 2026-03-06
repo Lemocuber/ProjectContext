@@ -25,6 +25,7 @@
       },
       "predictiveBackGestureEnabled": false
     },
+    "plugins": ["./plugins/withProjectContextConfigAsset"],
     "web": {
       "favicon": "./assets/favicon.png"
     }

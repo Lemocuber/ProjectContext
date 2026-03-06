@@ -1,65 +1,405 @@
-import { useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
+import { File } from 'expo-file-system';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  ToastAndroid,
+  View,
+} from 'react-native';
+import {
+  FinalPassError,
+  runDashScopeRecordedFinalPass,
+  type FinalPassSpeakerMode,
+} from '../services/asr/dashscopeRecordedRecognition';
+import {
+  getInternalRuntimeSettings,
+  loadEffectiveCosSettings,
+  loadEffectiveDashScopeApiKey,
+  loadEffectiveDeepSeekApiKey,
+  loadEffectiveVocabularySettings,
+} from '../config/defaultSettingsConfig';
 import { dashscopeRealtimeSessionService } from '../services/asr/dashscopeRealtimeSession';
 import type { AsrSession, RecordingStatus } from '../services/asr/types';
-import { loadApiKey } from '../storage/apiKeyStore';
+import { cleanupCosObjectBestEffort, stageAudioToCos } from '../services/cos/cosStagingService';
+import { exportTextToDownloads } from '../services/export/downloadsExportService';
+import {
+  anchorHighlightTaps,
+  buildFallbackTitle,
+  collectHighlightTexts,
+} from '../services/session/sessionFormatting';
+import { generateSessionTitle } from '../services/title/deepseekTitleService';
+import {
+  buildMarkdownFileName,
+  buildTranscriptMarkdown,
+  saveTranscriptMarkdown,
+} from '../services/transcript/transcriptMarkdown';
+import { hasCompleteCosSettings } from '../storage/cosSettingsStore';
 import {
   appendSessionHistory,
-  type SessionHistoryItem,
-  type SessionHistoryStatus,
+  updateSessionHistoryItem,
 } from '../storage/sessionHistoryStore';
+import type { AsrEvent } from '../services/asr/types';
+import type { FinalPassFailureReason, FinalizedSentence } from '../types/session';
+import type { SessionHistoryItem } from '../types/session';
 import { colors } from '../theme';
 
 type RecordScreenProps = {
   onHistoryUpdated?: () => void;
 };
 
+const AUTO_SCROLL_INACTIVITY_MS = 15_000;
+const AUTO_SCROLL_BOTTOM_THRESHOLD_PX = 56;
+const AUTO_SCROLL_THROTTLE_MS = 250;
+const DEFAULT_FINAL_PASS_SPEAKER_MODE: FinalPassSpeakerMode = 'auto';
+
+type FinalPassSpeakerModeOption = {
+  value: FinalPassSpeakerMode;
+  badge: string;
+  icon: 'person' | 'group' | 'groups' | 'hdr-auto';
+};
+
+const FINAL_PASS_SPEAKER_MODE_OPTIONS: FinalPassSpeakerModeOption[] = [
+  { value: 'auto', badge: 'Auto', icon: 'hdr-auto' },
+  { value: 'one', badge: '1', icon: 'person' },
+  { value: 'two', badge: '2', icon: 'group' },
+  { value: 'three', badge: '3', icon: 'groups' },
+];
+
+function inferFinalPassFailureReason(error: unknown): FinalPassFailureReason {
+  if (error instanceof FinalPassError) return error.reason;
+  if (error instanceof Error) {
+    const lower = error.message.toLowerCase();
+    if (lower.includes('expire') || lower.includes('403') || lower.includes('url')) {
+      return 'url_expired';
+    }
+    if (lower.includes('upload')) return 'upload_failed';
+  }
+  return 'unknown';
+}
+
 export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
   const [status, setStatus] = useState<RecordingStatus>('idle');
   const [transcriptText, setTranscriptText] = useState('');
   const [errorText, setErrorText] = useState('');
   const [infoText, setInfoText] = useState('');
+  const [highlightCount, setHighlightCount] = useState(0);
+  const [pendingFinalizeEvent, setPendingFinalizeEvent] = useState<
+    Extract<AsrEvent, { type: 'final' }> | null
+  >(null);
+  const [discardConfirmArmed, setDiscardConfirmArmed] = useState(false);
+  const [finalPassSpeakerMode, setFinalPassSpeakerMode] = useState<FinalPassSpeakerMode>(
+    DEFAULT_FINAL_PASS_SPEAKER_MODE,
+  );
   const sessionRef = useRef<AsrSession | null>(null);
   const transcriptRef = useRef('');
   const startAtRef = useRef<string | null>(null);
+  const startAtMsRef = useRef<number>(0);
   const sessionIdRef = useRef('');
   const persistedRef = useRef(false);
+  const highlightTapsMsRef = useRef<number[]>([]);
+  const finalPassSpeakerModeRef = useRef<FinalPassSpeakerMode>(DEFAULT_FINAL_PASS_SPEAKER_MODE);
+  const appliedVocabularyIdRef = useRef<string | undefined>(undefined);
+  const appliedVocabularyTermsRef = useRef<string[]>([]);
+  const transcriptScrollRef = useRef<ScrollView | null>(null);
+  const autoScrollEnabledRef = useRef(true);
+  const lastUserScrollAtRef = useRef(0);
+  const lastAutoScrollAtRef = useRef(0);
+  const scrollMetricsRef = useRef({
+    contentHeight: 0,
+    layoutHeight: 0,
+    offsetY: 0,
+  });
+  const programmaticScrollRef = useRef(false);
+  const programmaticScrollResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const isRecording = status === 'recording';
+  const hasPendingReview = !!pendingFinalizeEvent;
+  const isBusy = status === 'processing' || hasPendingReview;
+  const canEditSpeakerMode = !isRecording && !hasPendingReview && status !== 'processing';
+
+  const resetFinalPassSpeakerModeSelection = () => {
+    setFinalPassSpeakerMode(DEFAULT_FINAL_PASS_SPEAKER_MODE);
+    finalPassSpeakerModeRef.current = DEFAULT_FINAL_PASS_SPEAKER_MODE;
+  };
+
+  const isNearBottom = () => {
+    const metrics = scrollMetricsRef.current;
+    const distanceToBottom = metrics.contentHeight - (metrics.offsetY + metrics.layoutHeight);
+    return distanceToBottom <= AUTO_SCROLL_BOTTOM_THRESHOLD_PX;
+  };
+
+  const scrollTranscriptToBottom = () => {
+    if (!transcriptScrollRef.current) return;
+    const now = Date.now();
+    if (now - lastAutoScrollAtRef.current < AUTO_SCROLL_THROTTLE_MS) return;
+    lastAutoScrollAtRef.current = now;
+    programmaticScrollRef.current = true;
+    if (programmaticScrollResetTimerRef.current) {
+      clearTimeout(programmaticScrollResetTimerRef.current);
+    }
+    programmaticScrollResetTimerRef.current = setTimeout(() => {
+      programmaticScrollRef.current = false;
+      programmaticScrollResetTimerRef.current = null;
+    }, 220);
+    transcriptScrollRef.current.scrollToEnd({ animated: true });
+  };
+
+  const maybeAutoScrollTranscript = () => {
+    if (!isRecording) return;
+    const inactiveMs = Date.now() - lastUserScrollAtRef.current;
+    if (
+      autoScrollEnabledRef.current ||
+      lastUserScrollAtRef.current === 0 ||
+      inactiveMs > AUTO_SCROLL_INACTIVITY_MS
+    ) {
+      autoScrollEnabledRef.current = true;
+      scrollTranscriptToBottom();
+    }
+  };
+
+  const handleTranscriptScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    scrollMetricsRef.current = {
+      contentHeight: contentSize.height,
+      layoutHeight: layoutMeasurement.height,
+      offsetY: contentOffset.y,
+    };
+    if (programmaticScrollRef.current) return;
+    lastUserScrollAtRef.current = Date.now();
+    autoScrollEnabledRef.current = isNearBottom();
+  };
+
+  useEffect(() => {
+    maybeAutoScrollTranscript();
+  }, [isRecording, transcriptText]);
+
+  useEffect(
+    () => () => {
+      if (programmaticScrollResetTimerRef.current) {
+        clearTimeout(programmaticScrollResetTimerRef.current);
+      }
+    },
+    [],
+  );
 
   const statusLabel = useMemo(() => {
+    if (pendingFinalizeEvent) return 'Review Needed';
     if (status === 'recording') return 'Recording';
     if (status === 'processing') return 'Stopping';
     if (status === 'failed') return 'Failed';
     return 'Idle';
-  }, [status]);
+  }, [pendingFinalizeEvent, status]);
 
-  const persistSession = async (next: {
-    status: SessionHistoryStatus;
-    transcript?: string;
-    errorText?: string;
-    audioFileUri?: string | null;
-  }) => {
+  const persistSession = async (item: SessionHistoryItem) => {
     if (persistedRef.current) return;
-    if (!startAtRef.current || !sessionIdRef.current) return;
+    if (!sessionIdRef.current) return;
 
     persistedRef.current = true;
-    const item: SessionHistoryItem = {
-      id: sessionIdRef.current,
-      startedAt: startAtRef.current,
-      endedAt: new Date().toISOString(),
-      status: next.status,
-      transcript: next.transcript ?? transcriptRef.current,
-      errorText: next.errorText,
-      audioFileUri: next.audioFileUri ?? undefined,
-    };
-
     await appendSessionHistory(item);
     onHistoryUpdated?.();
   };
 
-  const start = async () => {
-    if (status === 'processing') return;
+  const persistFailedSession = async (params: { message: string; audioFileUri?: string | null }) => {
+    if (!startAtRef.current || !sessionIdRef.current) return;
+    const startedAt = startAtRef.current;
+    const endedAt = new Date().toISOString();
+    const fallbackTitle = buildFallbackTitle(startedAt);
+    await persistSession({
+      id: sessionIdRef.current,
+      startedAt,
+      endedAt,
+      status: 'failed',
+      transcript: transcriptRef.current,
+      realtimeTranscriptRaw: transcriptRef.current,
+      errorText: params.message,
+      audioFileUri: params.audioFileUri ?? undefined,
+      fallbackTitle,
+      highlightTapsMs: [...highlightTapsMsRef.current],
+      finalizedSentences: [],
+      appliedVocabularyId: appliedVocabularyIdRef.current,
+      appliedVocabularyTerms: [...appliedVocabularyTermsRef.current],
+      titleStatus: 'failed',
+    });
+  };
 
-    const apiKey = await loadApiKey();
+  const toast = (message: string) => {
+    if (Platform.OS === 'android') {
+      ToastAndroid.show(message, ToastAndroid.SHORT);
+    }
+  };
+
+  const finalizeCompletedSession = async (event: Extract<AsrEvent, { type: 'final' }>) => {
+    if (!startAtRef.current || !sessionIdRef.current) return;
+
+    const startedAt = startAtRef.current;
+    const endedAt = new Date().toISOString();
+    const fallbackTitle = buildFallbackTitle(startedAt);
+    const deepSeekApiKey = (await loadEffectiveDeepSeekApiKey())?.trim() || '';
+    const hasDeepSeekKey = !!deepSeekApiKey;
+    const realtimeTranscriptRaw = event.text.trim();
+    const cosSettings = await loadEffectiveCosSettings();
+    const internalRuntimeSettings = await getInternalRuntimeSettings();
+    const cosConfigured = hasCompleteCosSettings(cosSettings);
+    const canRunFinalPass = !!event.audioFileUri && cosConfigured;
+
+    let finalPassStatus: 'pending' | 'completed' | 'failed' = canRunFinalPass ? 'pending' : 'failed';
+    let finalPassFailureReason: FinalPassFailureReason | undefined;
+    if (!canRunFinalPass) {
+      finalPassFailureReason = !event.audioFileUri ? 'upload_failed' : 'unknown';
+    }
+    let finalPassTaskId: string | undefined;
+    let sourceAudioRemoteUrl: string | undefined;
+    let sourceAudioObjectKey: string | undefined;
+    let finalizedSentences: FinalizedSentence[] = [];
+    let bestTranscriptText = realtimeTranscriptRaw;
+    let generatedTitle: string | undefined;
+    let titleStatus: 'pending' | 'completed' | 'failed' = hasDeepSeekKey ? 'pending' : 'failed';
+
+    await persistSession({
+      id: sessionIdRef.current,
+      startedAt,
+      endedAt,
+      status: 'completed',
+      transcript: realtimeTranscriptRaw,
+      realtimeTranscriptRaw,
+      fallbackTitle,
+      highlightTapsMs: [...highlightTapsMsRef.current],
+      finalizedSentences: [],
+      finalPassStatus,
+      finalPassFailureReason,
+      audioFileUri: event.audioFileUri ?? undefined,
+      appliedVocabularyId: appliedVocabularyIdRef.current,
+      appliedVocabularyTerms: [...appliedVocabularyTermsRef.current],
+      titleStatus,
+    });
+    if (canRunFinalPass && event.audioFileUri) {
+      try {
+        setInfoText('Uploading audio for final-pass recognition...');
+        const stagedAudio = await stageAudioToCos({
+          settings: cosSettings,
+          sessionId: sessionIdRef.current,
+          startedAt,
+          audioFileUri: event.audioFileUri,
+          signedUrlTtlSec: internalRuntimeSettings.signedUrlTtlSec,
+        });
+        sourceAudioRemoteUrl = stagedAudio.sourceAudioRemoteUrl;
+        sourceAudioObjectKey = stagedAudio.objectKey;
+        await updateSessionHistoryItem(sessionIdRef.current, (item) => ({
+          ...item,
+          sourceAudioRemoteUrl,
+          sourceAudioObjectKey,
+        }));
+        onHistoryUpdated?.();
+
+        const finalPassResult = await runDashScopeRecordedFinalPass({
+          apiKey: (await loadEffectiveDashScopeApiKey()) || '',
+          sourceAudioRemoteUrl,
+          timeoutMs: internalRuntimeSettings.finalPassTimeoutSec * 1000,
+          vocabularyId: appliedVocabularyIdRef.current,
+          speakerMode: finalPassSpeakerModeRef.current,
+          onStatus: (message) => setInfoText(message),
+        });
+
+        finalPassTaskId = finalPassResult.taskId;
+        finalizedSentences = anchorHighlightTaps(
+          finalPassResult.finalizedSentences,
+          highlightTapsMsRef.current,
+        );
+        bestTranscriptText =
+          finalPassResult.transcriptText.trim() ||
+          finalizedSentences.map((sentence) => sentence.text).join(' ').trim() ||
+          realtimeTranscriptRaw;
+        finalPassStatus = 'completed';
+        finalPassFailureReason = undefined;
+      } catch (error) {
+        finalPassStatus = 'failed';
+        finalPassFailureReason = inferFinalPassFailureReason(error);
+        finalizedSentences = [];
+        bestTranscriptText = realtimeTranscriptRaw;
+      } finally {
+        if (internalRuntimeSettings.cosCleanupEnabled) {
+          await cleanupCosObjectBestEffort({
+            settings: cosSettings,
+            objectKey: sourceAudioObjectKey,
+          });
+        }
+      }
+    }
+
+    if (hasDeepSeekKey && bestTranscriptText.trim()) {
+      setInfoText('Generating session title...');
+      try {
+        generatedTitle = await generateSessionTitle({
+          apiKey: deepSeekApiKey,
+          transcript: bestTranscriptText,
+          highlights: collectHighlightTexts(finalizedSentences),
+        });
+        titleStatus = 'completed';
+      } catch {
+        titleStatus = 'failed';
+      }
+    } else if (hasDeepSeekKey) {
+      titleStatus = 'failed';
+    }
+
+    const finalTitle = generatedTitle || fallbackTitle;
+    const markdown = buildTranscriptMarkdown({
+      title: finalTitle,
+      startedAt,
+      endedAt,
+      sentences: finalPassStatus === 'completed' ? finalizedSentences : undefined,
+      fallbackTranscript: finalPassStatus === 'completed' ? undefined : realtimeTranscriptRaw,
+    });
+    const transcriptMarkdownUri = saveTranscriptMarkdown(sessionIdRef.current, markdown);
+    const markdownFileName = buildMarkdownFileName(startedAt, finalTitle);
+
+    let markdownAutoExportStatus: 'completed' | 'failed' = 'failed';
+    let markdownLastPath: string | undefined;
+    setInfoText('Exporting markdown to Downloads...');
+    try {
+      markdownLastPath = await exportTextToDownloads({
+        fileName: markdownFileName,
+        content: markdown,
+      });
+      markdownAutoExportStatus = 'completed';
+      toast('Markdown exported to Downloads.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Markdown auto-export failed.';
+      toast(message);
+    }
+
+    await updateSessionHistoryItem(sessionIdRef.current, (item) => ({
+      ...item,
+      transcript: markdown,
+      generatedTitle,
+      titleStatus,
+      finalizedSentences: finalPassStatus === 'completed' ? finalizedSentences : [],
+      finalPassStatus,
+      finalPassTaskId,
+      finalPassFailureReason,
+      sourceAudioRemoteUrl,
+      sourceAudioObjectKey,
+      transcriptMarkdownUri,
+      exportMetadata: {
+        ...item.exportMetadata,
+        markdownAutoExportStatus,
+        markdownExportedAt: markdownAutoExportStatus === 'completed' ? new Date().toISOString() : undefined,
+        markdownLastPath,
+      },
+    }));
+    onHistoryUpdated?.();
+  };
+
+  const start = async () => {
+    if (status === 'processing' || hasPendingReview) return;
+
+    const apiKey = await loadEffectiveDashScopeApiKey();
     if (!apiKey) {
       setStatus('failed');
       setErrorText('Set your API key in Settings before recording.');
@@ -71,13 +411,37 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
     transcriptRef.current = '';
     setErrorText('');
     setInfoText('');
+    setHighlightCount(0);
+    setPendingFinalizeEvent(null);
+    setDiscardConfirmArmed(false);
     startAtRef.current = new Date().toISOString();
+    startAtMsRef.current = Date.now();
     sessionIdRef.current = buildSessionId();
     persistedRef.current = false;
+    highlightTapsMsRef.current = [];
+    finalPassSpeakerModeRef.current = finalPassSpeakerMode;
+    appliedVocabularyIdRef.current = undefined;
+    appliedVocabularyTermsRef.current = [];
+    autoScrollEnabledRef.current = true;
+    lastUserScrollAtRef.current = 0;
+    lastAutoScrollAtRef.current = 0;
+    scrollMetricsRef.current = {
+      contentHeight: 0,
+      layoutHeight: 0,
+      offsetY: 0,
+    };
+
+    const vocabularySettings = await loadEffectiveVocabularySettings();
+    const vocabularyId = vocabularySettings.syncStatus === 'failed' ? undefined : vocabularySettings.vocabularyId;
+    if (vocabularyId) {
+      appliedVocabularyIdRef.current = vocabularyId;
+      appliedVocabularyTermsRef.current = [...vocabularySettings.terms];
+    }
 
     try {
       sessionRef.current = await dashscopeRealtimeSessionService.start({
         apiKey,
+        vocabularyId,
         onEvent: (event) => {
           if (event.type === 'live') {
             transcriptRef.current = event.text;
@@ -86,13 +450,10 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
           if (event.type === 'final') {
             transcriptRef.current = event.text;
             setTranscriptText(event.text);
+            setPendingFinalizeEvent(event);
+            setDiscardConfirmArmed(false);
             setStatus('idle');
-            setInfoText('');
-            void persistSession({
-              status: 'completed',
-              transcript: event.text,
-              audioFileUri: event.audioFileUri,
-            });
+            setInfoText('Review recording: discard or continue.');
           }
           if (event.type === 'status') {
             setInfoText(event.message);
@@ -101,9 +462,9 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
             setErrorText(event.message);
             setStatus('failed');
             setInfoText('');
-            void persistSession({
-              status: 'failed',
-              errorText: event.message,
+            resetFinalPassSpeakerModeSelection();
+            void persistFailedSession({
+              message: event.message,
               audioFileUri: event.audioFileUri,
             });
           }
@@ -114,7 +475,8 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
       const message = error instanceof Error ? error.message : 'Failed to start audio session.';
       setErrorText(message);
       setInfoText('');
-      await persistSession({ status: 'failed', errorText: message });
+      resetFinalPassSpeakerModeSelection();
+      await persistFailedSession({ message });
     }
   };
 
@@ -128,15 +490,95 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
       const message = error instanceof Error ? error.message : 'Failed to stop audio session.';
       setErrorText(message);
       setInfoText('');
-      await persistSession({ status: 'failed', errorText: message });
+      resetFinalPassSpeakerModeSelection();
+      await persistFailedSession({ message });
     } finally {
       sessionRef.current = null;
     }
   };
 
-  const isRecording = status === 'recording';
-  const isBusy = status === 'processing';
-  const recordButtonText = isRecording ? 'Stop' : 'Start Recording';
+  const markHighlight = () => {
+    if (!startAtMsRef.current || status !== 'recording') return;
+    const tapMs = Math.max(0, Date.now() - startAtMsRef.current);
+    highlightTapsMsRef.current = [...highlightTapsMsRef.current, tapMs];
+    setHighlightCount(highlightTapsMsRef.current.length);
+  };
+
+  const continueFinalize = async () => {
+    if (!pendingFinalizeEvent) return;
+    const event = pendingFinalizeEvent;
+    setPendingFinalizeEvent(null);
+    setDiscardConfirmArmed(false);
+    setStatus('processing');
+    setErrorText('');
+    setInfoText('Finalizing session...');
+
+    let failed = false;
+    try {
+      await finalizeCompletedSession(event);
+    } catch (error) {
+      failed = true;
+      const message = error instanceof Error ? error.message : 'Failed to finalize session.';
+      setErrorText(message);
+      setStatus('failed');
+      await persistFailedSession({
+        message,
+        audioFileUri: event.audioFileUri,
+      });
+    } finally {
+      setInfoText('');
+      resetFinalPassSpeakerModeSelection();
+      if (!failed) {
+        setStatus('idle');
+      }
+    }
+  };
+
+  const discardRecording = async () => {
+    if (!pendingFinalizeEvent) return;
+    if (!discardConfirmArmed) {
+      setDiscardConfirmArmed(true);
+      setInfoText('Tap discard again to confirm.');
+      return;
+    }
+
+    if (pendingFinalizeEvent.audioFileUri) {
+      try {
+        const file = new File(pendingFinalizeEvent.audioFileUri);
+        if (file.exists) {
+          file.delete();
+        }
+      } catch {
+        // Best effort cleanup of local recording artifact.
+      }
+    }
+
+    setPendingFinalizeEvent(null);
+    setDiscardConfirmArmed(false);
+    resetFinalPassSpeakerModeSelection();
+    setStatus('idle');
+    setTranscriptText('');
+    transcriptRef.current = '';
+    setHighlightCount(0);
+    setErrorText('');
+    setInfoText('Recording discarded.');
+    startAtRef.current = null;
+    startAtMsRef.current = 0;
+    sessionIdRef.current = '';
+    persistedRef.current = false;
+    highlightTapsMsRef.current = [];
+    finalPassSpeakerModeRef.current = DEFAULT_FINAL_PASS_SPEAKER_MODE;
+    appliedVocabularyIdRef.current = undefined;
+    appliedVocabularyTermsRef.current = [];
+    autoScrollEnabledRef.current = true;
+    lastUserScrollAtRef.current = 0;
+    lastAutoScrollAtRef.current = 0;
+    scrollMetricsRef.current = {
+      contentHeight: 0,
+      layoutHeight: 0,
+      offsetY: 0,
+    };
+  };
 
   return (
     <View style={styles.layout}>
@@ -150,16 +592,82 @@ export function RecordScreen({ onHistoryUpdated }: RecordScreenProps) {
         style={({ pressed }) => [
           styles.recordButton,
           isBusy ? styles.recordButtonDisabled : null,
-          pressed && isRecording ? styles.recordButtonPressed : null,
+          pressed && !isBusy ? styles.recordButtonPressed : null,
         ]}
       >
-        <Text style={styles.recordButtonText}>{recordButtonText}</Text>
+        <MaterialIcons
+          color="#fff"
+          name={isRecording ? 'stop' : 'play-arrow'}
+          size={isRecording ? 72 : 86}
+        />
       </Pressable>
+
+      {hasPendingReview ? (
+        <View style={styles.postRecordActionsRow}>
+          <Pressable
+            onPress={discardRecording}
+            style={[
+              styles.postRecordDiscardButton,
+              discardConfirmArmed ? styles.postRecordDiscardButtonArmed : null,
+            ]}
+          >
+            <MaterialIcons
+              color={discardConfirmArmed ? '#9D1A1A' : colors.muted}
+              name={discardConfirmArmed ? 'help-outline' : 'delete-outline'}
+              size={22}
+            />
+          </Pressable>
+          <Pressable onPress={continueFinalize} style={styles.postRecordContinueButton}>
+            <MaterialIcons color="#fff" name="check" size={26} />
+          </Pressable>
+        </View>
+      ) : isRecording ? (
+        <Pressable onPress={markHighlight} style={styles.highlightButton}>
+          <Text style={styles.highlightButtonText}>Mark Highlight</Text>
+        </Pressable>
+      ) : (
+        <View style={styles.speakerModeSelectWrap}>
+          {FINAL_PASS_SPEAKER_MODE_OPTIONS.map((entry) => {
+            const selected = entry.value === finalPassSpeakerMode;
+            return (
+              <Pressable
+                disabled={!canEditSpeakerMode}
+                key={entry.value}
+                onPress={() => setFinalPassSpeakerMode(entry.value)}
+                style={[
+                  styles.speakerModeChip,
+                  entry.value === 'auto' ? styles.speakerModeChipAuto : styles.speakerModeChipNumber,
+                  selected ? styles.speakerModeChipSelected : null,
+                  !canEditSpeakerMode ? styles.speakerModeChipDisabled : null,
+                ]}
+              >
+                <Text style={styles.speakerModeBadge}>{entry.badge}</Text>
+                <MaterialIcons color={colors.ink} name={entry.icon} size={18} />
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
+      <Text style={styles.highlightCountText}>Highlights: {highlightCount}</Text>
 
       {errorText ? <Text style={styles.errorText}>{errorText}</Text> : null}
       {infoText ? <Text style={styles.infoText}>{infoText}</Text> : null}
 
-      <ScrollView contentContainerStyle={styles.transcriptWrap} style={styles.transcriptPanel}>
+      <ScrollView
+        contentContainerStyle={styles.transcriptWrap}
+        onContentSizeChange={(_, contentHeight) => {
+          scrollMetricsRef.current.contentHeight = contentHeight;
+          maybeAutoScrollTranscript();
+        }}
+        onLayout={(event) => {
+          scrollMetricsRef.current.layoutHeight = event.nativeEvent.layout.height;
+          maybeAutoScrollTranscript();
+        }}
+        onScroll={handleTranscriptScroll}
+        ref={transcriptScrollRef}
+        scrollEventThrottle={100}
+        style={styles.transcriptPanel}
+      >
         <Text style={styles.sectionTitle}>Transcript</Text>
         <Text style={styles.transcriptText}>{transcriptText || 'Start recording to capture transcript.'}</Text>
       </ScrollView>
@@ -207,10 +715,86 @@ const styles = StyleSheet.create({
   recordButtonDisabled: {
     backgroundColor: '#CCB6AE',
   },
-  recordButtonText: {
+  highlightButton: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    backgroundColor: colors.ink,
+    borderRadius: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
+  highlightButtonText: {
     color: '#fff',
-    fontSize: 24,
-    fontWeight: '800',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  speakerModeSelectWrap: {
+    alignSelf: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    width: 242,
+  },
+  speakerModeChip: {
+    alignItems: 'center',
+    backgroundColor: '#ECE7DD',
+    borderColor: colors.border,
+    borderRadius: 10,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 4,
+    height: 42,
+    justifyContent: 'center',
+  },
+  speakerModeChipAuto: {
+    flex: 1.35,
+  },
+  speakerModeChipNumber: {
+    flex: 0.9,
+  },
+  speakerModeChipSelected: {
+    backgroundColor: '#F5ECDF',
+    borderColor: '#D2B59B',
+  },
+  speakerModeChipDisabled: {
+    opacity: 0.75,
+  },
+  speakerModeBadge: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  postRecordActionsRow: {
+    alignSelf: 'center',
+    flexDirection: 'row',
+    gap: 10,
+    width: 242,
+  },
+  postRecordDiscardButton: {
+    alignItems: 'center',
+    backgroundColor: '#ECE7DD',
+    borderColor: colors.border,
+    borderRadius: 10,
+    borderWidth: 1,
+    height: 42,
+    justifyContent: 'center',
+    width: 76,
+  },
+  postRecordDiscardButtonArmed: {
+    backgroundColor: '#F7E6E0',
+    borderColor: '#D9A79A',
+  },
+  postRecordContinueButton: {
+    alignItems: 'center',
+    backgroundColor: colors.accent,
+    borderRadius: 10,
+    flex: 1,
+    height: 42,
+    justifyContent: 'center',
+  },
+  highlightCountText: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '700',
     textAlign: 'center',
   },
   errorText: {

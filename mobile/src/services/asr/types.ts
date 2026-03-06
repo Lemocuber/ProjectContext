@@ -22,6 +22,7 @@ export type AsrSession = {
 export type AsrSessionService = {
   start: (params: {
     apiKey: string;
+    vocabularyId?: string;
     onEvent: (event: AsrEvent) => void;
   }) => Promise<AsrSession>;
 };

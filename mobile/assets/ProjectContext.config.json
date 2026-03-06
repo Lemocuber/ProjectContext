@@ -1,0 +1,16 @@
+{
+  "dashscopeKey": "",
+  "deepseekKey": "",
+  "tencentCos": {
+    "bucketId": "",
+    "bucketRegion": "",
+    "secretId": "",
+    "secretKey": ""
+  },
+  "vocabulary": [],
+  "internal": {
+    "signedUrlTtl": 7200,
+    "finalPassTimeout": 1800,
+    "cosCleanupEnabled": true
+  }
+}

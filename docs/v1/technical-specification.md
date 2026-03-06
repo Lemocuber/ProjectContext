@@ -1,66 +1,289 @@
 # Technical Specification (V1)
 
-Date: 2026-03-02
+Date: 2026-03-06
 
 ## Scope Additions Over V0
-- Highlight event capture and transcript alignment.
-- Speaker diarization support in finalized transcript artifacts.
-- Vocabulary integration for ASR requests.
+- Highlight tap capture and sentence-level transcript anchoring.
+- Pre-record speaker-mode selector for post-record file ASR diarization behavior.
+- Build-time default settings asset contract (`mobile/assets/ProjectContext.config.json`) with section-level preload and UI-hiding.
+- Post-record file ASR final pass as the source of truth for:
+  - sentence timestamps,
+  - speaker diarization labels,
+  - finalized transcript line segmentation.
+- Persisted raw realtime transcript fallback artifact.
+- Vocabulary integration for recognition requests.
 - Post-session LLM generation:
-  - session title
-  - markdown summary document
+  - session title only.
+- Finalized markdown transcript artifact generation.
 - Session export actions:
-  - markdown export
-  - audio export
+  - markdown auto-export to `Downloads` after finalize,
+  - manual markdown export,
+  - manual audio export.
 
-## Data Model Additions (Draft)
-- SessionHistoryItem:
-  - `highlights: number[]` (milliseconds from session start)
-  - `highlightWindows?: Array<{ startMs: number; endMs: number; text: string }>`
-  - `speakerSegments?: Array<{ speakerId: string; startMs: number; endMs: number; text: string }>`
-  - `vocabularyId?: string`
-  - `generatedTitle?: string`
-  - `summaryMarkdownUri?: string`
-  - `summaryStatus?: "pending" | "completed" | "failed"`
-  - `exportMetadata?: { markdownExportedAt?: string; audioExportedAt?: string }`
+## Transcript Modes
+- Live transcript:
+  - in-session display only,
+  - raw/clean text,
+  - no timestamps, no speaker tags, no highlight markers.
+- Realtime fallback transcript:
+  - persisted raw/unprocessed text copy from live stream,
+  - used only when post-record file ASR fails.
+- Finalized transcript:
+  - generated only from post-record file ASR result,
+  - markdown artifact with sentence-level timestamps,
+  - includes inline speaker/highlight markers based on finalized sentence metadata.
+
+## Data Model Additions (Locked)
+- `SessionHistoryItem`:
+  - `highlightTapsMs: number[]` (milliseconds from session start),
+  - `realtimeTranscriptRaw: string` (unprocessed fallback transcript),
+  - `finalPassStatus?: "pending" | "completed" | "failed"`,
+  - `finalPassTaskId?: string`,
+  - `finalPassFailureReason?: "upload_failed" | "url_expired" | "recognition_failed" | "timeout" | "unknown"`,
+  - `sourceAudioRemoteUrl?: string` (COS URL used for file ASR task submission),
+  - `sourceAudioObjectKey?: string` (COS object key for cleanup/audit),
+  - `finalizedSentences?: Array<{ startMs: number; endMs: number; text: string; speakerLabel?: string; isHighlight?: boolean }>` (from file ASR only),
+  - `appliedVocabularyId?: string`,
+  - `appliedVocabularyTerms?: string[]`,
+  - `generatedTitle?: string`,
+  - `titleStatus?: "pending" | "completed" | "failed"`,
+  - `fallbackTitle: string`,
+  - `transcriptMarkdownUri?: string`,
+  - `exportMetadata?: { markdownExportedAt?: string; markdownLastPath?: string; markdownAutoExportStatus?: "completed" | "failed"; audioExportedAt?: string; audioLastPath?: string }`.
+- `VocabularySettings`:
+  - `rawText: string` (textarea content, one term per line),
+  - `terms: string[]` (trimmed, non-empty, de-duplicated),
+  - `vocabularyId?: string` (managed internally, not user-entered),
+  - `syncStatus?: "idle" | "syncing" | "failed"`.
+- Storage versioning:
+  - v1 remains on `session_history_v2`,
+  - no backward compatibility/migration from v0 persisted session shape is required.
+
+## Default Settings Asset Contract (V1 Launch)
+- App bundle includes `mobile/assets/ProjectContext.config.json`.
+- Android prebuild copies the same file to `android/app/src/main/assets/ProjectContext.config.json` for packaged APK inspection/extraction.
+- Android runtime reads config from `asset:///ProjectContext.config.json` (APK assets path) at startup.
+- If runtime JSON is missing/invalid, config defaults are treated as empty (no built-in bundled fallback override).
+- Supported keys:
+  - `dashscopeKey: string`,
+  - `deepseekKey: string`,
+  - `tencentCos: { bucketId, bucketRegion, secretId, secretKey }`,
+  - `vocabulary: string[]`,
+  - `internal: { signedUrlTtl, finalPassTimeout, cosCleanupEnabled }`.
+- Section completeness/discard:
+  - DashScope section is valid only when `dashscopeKey` is non-empty and key-format valid.
+  - DeepSeek section is valid only when `deepseekKey` is non-empty and key-format valid.
+  - Tencent COS section is valid only when all 4 required fields are non-empty and valid.
+  - Vocabulary section is valid only when parsed vocabulary terms are non-empty and valid.
+  - Any incomplete/invalid section is discarded completely.
+- UI behavior:
+  - A valid section is hidden from Settings and used as runtime source of truth.
+  - If all four user-facing sections are valid, the Settings tab is hidden.
+- Internal runtime policy:
+  - `internal.signedUrlTtl` is in seconds.
+  - `internal.finalPassTimeout` is in seconds.
+  - `internal.cosCleanupEnabled` toggles best-effort COS object cleanup.
+  - Internal section has no user-facing Settings UI.
 
 ## Recording and Finalization Pipeline
-1. Start recording with selected ASR configuration (includes optional `vocabularyId`).
-2. Capture highlight tap events as relative timestamps while recording.
-3. On stop/finalize:
-  - finalize transcript text,
-  - resolve highlight timestamps to transcript windows,
-  - persist enriched session artifact.
-4. Trigger LLM generation jobs (title and markdown summary) against finalized transcript + highlights.
-5. Persist LLM outputs and expose generation status in history/detail.
+1. Start recording and realtime ASR stream for live transcript UX.
+2. Before start, user can set speaker mode for final-pass file ASR:
+  - `auto` (default): diarization enabled, no fixed speaker count,
+  - `1 person`: diarization disabled,
+  - `2 person`: diarization enabled with speaker-count hint `2`,
+  - `3 person`: diarization enabled with speaker-count hint `3`.
+3. Capture highlight taps as `tapMs` while recording.
+4. Persist rolling raw realtime transcript content for fallback.
+5. On stop, persist audio artifact and enter post-record review state.
+6. Post-record review actions:
+  - discard (requires two-tap confirmation before delete/reset),
+  - continue (starts existing finalize pipeline).
+7. Stage recorded audio to COS (zero-backend BYOK upload mode).
+8. Resolve a publicly fetchable HTTPS URL for file ASR (prefer signed URL).
+9. Submit file ASR recognition task for the staged audio URL with selected speaker-mode parameters.
+10. Poll/query recognition task until terminal state.
+11. If file ASR succeeds:
+  - parse sentence timestamps/speakers from result,
+  - anchor highlight taps to finalized sentences,
+  - generate markdown transcript artifact from finalized sentences.
+12. If file ASR fails/times out:
+  - mark `finalPassStatus="failed"`,
+  - set `finalPassFailureReason`,
+  - keep `realtimeTranscriptRaw` as session fallback transcript,
+  - skip speaker/timestamp enrichment.
+13. Trigger title generation and markdown export using best available transcript artifact.
+14. Persist title updates and export statuses for history/detail rendering.
 
-## Speaker Diarization
-- Store speaker-attributed segments if provided by ASR stream/final response.
-- If diarization is unavailable for a session, keep transcript usable and mark speaker data as unavailable.
+## Record Screen Controls
+- Primary record button uses icon-only states:
+  - idle: start icon,
+  - recording: stop icon.
+- While recording:
+  - show highlight button,
+  - transcript panel supports conditional auto-scroll to bottom.
+- Before recording starts (and after a session resets), show a speaker-mode select control in the highlight-button slot.
+- Selector is rendered as a one-line inline option row (no dropdown).
+- Speaker-mode options map to compact chips:
+  - `Auto` (auto decide, default),
+  - `1` (1 person, no diarization),
+  - `2` (2 person hint),
+  - `3` (3 person hint).
+- UI uses badge + icon only (no text labels).
+- Icon cue:
+  - auto icon (`hdr-auto`) for `Auto`,
+  - single-person icon for `1`,
+  - two-person icon for `2`,
+  - multi-person icon for `3`.
+- Selection is fixed once recording begins and reset to `auto` when session state returns to fresh ready state after complete/discard/failure.
+- After stop (pending review):
+  - replace highlight button area with split action row,
+  - left action: discard icon button, secondary style, narrower width,
+  - right action: continue icon button, primary style, wider width.
+- Discard requires two taps in pending review state:
+  - first tap arms discard confirmation and swaps icon to an explicit confirmation icon,
+  - second tap confirms discard and resets in-memory draft session state.
+
+## Transcript Auto-Scroll Rule
+- Auto-scroll applies only while `status=recording`.
+- If user is near the bottom of transcript, incoming transcript updates scroll to bottom.
+- If user scrolls away from bottom, auto-scroll pauses to avoid fighting user scroll.
+- Auto-scroll resumes when either:
+  - user scrolls back near bottom, or
+  - user has >15 seconds of scroll inactivity during recording.
+
+## Zero-Backend COS BYOK Mode (Locked)
+- v1 supports a zero-backend storage staging mode via Tencent COS.
+- User provides BYOK COS configuration in Settings unless prefilled in `assets/ProjectContext.config.json`.
+- Ingestion path:
+  - app upload path only: app uploads recorded audio to COS and generates a signed GET URL.
+- URL contract for file ASR submission:
+  - HTTPS only,
+  - must remain valid for full recognition lifecycle,
+  - signed URL expiry must exceed `final-pass timeout + queue buffer`.
+- Initial recommended defaults:
+  - presigned URL expiry: `>= 2 hours`,
+  - final-pass timeout: `<= 30 minutes` per task.
+- For private buckets, use presigned GET URLs; avoid public-read as default.
+- Upload constraints:
+  - single PUT supports up to 5GB,
+  - files over 5GB require multipart upload.
+- Cleanup:
+  - delete staged COS object after terminal file-ASR state on best-effort basis,
+  - cleanup failure must not block session completion.
+
+## BYOK Configuration Checklist (V1)
+- DashScope (required):
+  - `dashscopeKey` (used for realtime ASR, file ASR, vocabulary API).
+- DeepSeek (optional but recommended):
+  - `deepseekKey` (used for async title generation).
+- COS upload fields (required for file-ASR source):
+  - `bucketId` (BucketName-APPID),
+  - `bucketRegion`,
+  - `secretId`,
+  - `secretKey`.
+- Runtime policy knobs:
+  - `internal.signedUrlTtl` (seconds, recommended >= 7200),
+  - `internal.finalPassTimeout` (seconds, recommended <= 1800),
+  - `internal.cosCleanupEnabled` (best-effort delete after terminal state).
+
+## Sentence Timestamp Rule (File ASR)
+- Finalized sentence timestamps must come from file ASR result payload.
+- If sentence-level times are missing, use documented word-level fallbacks from file ASR payload.
+- If neither sentence nor word timing is available for a line, fallback to nearest prior known time and never synthesize speaker data.
+- Timestamp display format in markdown lines: `[mm:ss]` from `startMs`.
+
+## Highlight Anchoring Rule
+- Store taps only as `tapMs` during recording.
+- On successful file ASR finalize, for each tap:
+  - anchor to sentence containing tap (`startMs <= tapMs <= endMs`),
+  - else anchor to first sentence with `startMs > tapMs`,
+  - else anchor to final sentence in session.
+- Anchored sentence line gets `[!IMPORTANT]` marker.
+- Multiple taps anchored to one sentence still render a single marker on that line.
+- If file ASR fails, keep unanchored raw highlight taps in metadata only.
+
+## Speaker Diarization Rule
+- Speaker labels are sourced only from file ASR diarization output.
+- If speaker information is available for a finalized sentence, render inline as `[Speaker N]`.
+- If speaker information is unavailable, omit speaker label entirely.
+- Do not infer speaker labels from realtime ASR payloads.
+
+## Final-Pass Speaker Mode Rule
+- Speaker-mode selection affects post-record file ASR task submission only.
+- Parameter mapping for file ASR request:
+  - `auto decide` -> `diarization_enabled=true` with no `speaker_count`,
+  - `1 person (no diarization)` -> `diarization_enabled=false`,
+  - `2 person` -> `diarization_enabled=true`, `speaker_count=2`,
+  - `3 person` -> `diarization_enabled=true`, `speaker_count=3`.
+- Realtime ASR request behavior is unchanged and remains display-focused.
+
+## Title Generation Rule
+- Fallback title is available immediately at finalize:
+  - `Record YY-MM-DD hh:mm` (session start local time).
+- LLM title generation is attempted during finalize after final-pass transcript selection.
+- LLM provider for v1: DeepSeek (BYOK).
+- DeepSeek key handling follows existing BYOK storage/validation patterns.
+- Generated title language must match the transcript language (dominant language when transcript is mixed).
+- Title length should be brief and natural for the target language (do not enforce a fixed word-count across all languages).
+- On success, replace fallback title with generated title.
+- On failure, keep fallback title and mark `titleStatus="failed"`.
+
+## Markdown Transcript Output
+- One markdown document per completed session.
+- Preferred source: file ASR finalized sentence list.
+- Fallback source: `realtimeTranscriptRaw` when file ASR is unavailable.
+- File content format:
+  - line 1: `# {Title}`,
+  - line 2: `YY-MM-DD hh:mm - hh:mm{ (+1d when cross-day) } ({rounded minutes} minutes)`,
+  - line 3: `---`,
+  - remaining lines:
+    - success path: `[mm:ss] [Speaker N] [!IMPORTANT] {sentence text}` (tokens omitted when not applicable),
+    - fallback path: plain transcript lines without speaker/timestamp/highlight tags.
+- Duration in minutes is rounded to nearest minute.
+- Store markdown artifact in local app storage and reference via `transcriptMarkdownUri`.
+- Persist `SessionHistoryItem.transcript` from the same finalized markdown content so History text matches export content.
+
+## Filename and Export
+- Markdown filename: `YYMMDD-{Title}.md` (sanitized for filesystem safety).
+- Filename sanitization uses a blacklist of filesystem-invalid characters and preserves non-Latin characters.
+- Destination: user `Downloads` directory.
+- Auto-export markdown once after final-pass completion and title-generation attempt.
+- Auto-export failure does not trigger background retry on next launch.
+- Manual export actions remain available for markdown and audio.
+- In-app stored artifacts are always retained even if export fails.
+- Export flow must continue to work after app restart for previously completed sessions.
+- Android/Expo implementation contract:
+  - use SAF directory permission for `Downloads`,
+  - cache granted `Downloads` directory URI in local settings,
+  - request permission when no valid cached permission exists,
+  - fail gracefully when permission denied/unavailable and record status,
+  - manual export can re-request permission and retry.
 
 ## Vocabulary Support
-- Add vocabulary configuration path in Settings (BYOK-compatible).
-- Include configured `vocabularyId` in ASR task initialization payload.
-- Persist the applied `vocabularyId` with session metadata.
-
-## Markdown Summary Output
-- Produce one markdown document per completed session.
-- Include at minimum:
-  - session title,
-  - session metadata (date, duration),
-  - concise summary sections,
-  - highlight list,
-  - optional speaker-attributed excerpt block.
-- Save document to local app storage and reference via `summaryMarkdownUri`.
-
-## Export
-- Markdown export:
-  - user action from history/detail exports generated markdown document.
-- Audio export:
-  - user action from history/detail exports recorded audio artifact.
-- Export flow should work after app restart for previously completed sessions.
+- Settings UI for vocabulary remains when section is not prefilled by config:
+  - multiline textarea input (`one term per line`),
+  - save/update action,
+  - clear action to disable vocabulary injection.
+- Vocabulary scope for v1 remains global app settings (no per-session override).
+- Validation/sync constraints remain unchanged.
+- Apply configured vocabulary to post-record file ASR request where the API supports it.
+- Realtime ASR may use vocabulary only as a best-effort live-caption enhancement; it is not part of finalized transcript correctness.
+- Persist `appliedVocabularyId` and `appliedVocabularyTerms` with each session snapshot for auditability.
 
 ## Reliability and Failure Handling
-- LLM generation failures do not invalidate core session persistence.
+- File ASR final pass failure does not invalidate core session persistence (audio + realtime fallback transcript remain available).
+- URL-expired/file-fetch failures map to explicit `finalPassFailureReason`.
+- When URL expiry/fetch failure happens, do not retry automatically with the same URL.
+- LLM title generation failure does not invalidate transcript persistence.
+- Auto-export failure updates export status and exposes manual retry path.
+- Auto-export shows toast feedback for success/failure states.
 - Export failure must not mutate original stored artifacts.
-- Missing optional artifacts (summary, diarization) should degrade gracefully in UI.
+
+## References
+- `docs/dashscope-asr-docs/overview.md` (realtime stream behavior)
+- `docs/dashscope-asr-docs/recorded-recognition.md` (post-record final-pass assumptions)
+- `docs/dashscope-asr-docs/vocabulary.md` (vocabulary customization API)
+- `docs/tencent-cos-docs/presign_url.md` (signed URL behavior and expiry)
+- `docs/tencent-cos-docs/put_object.md` (upload constraints)
+- `docs/tencent-cos-docs/get_object.md` (read permission behavior)
+- `docs/tencent-cos-docs/delete_object.md` (cleanup semantics)

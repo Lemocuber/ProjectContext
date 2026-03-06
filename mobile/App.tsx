@@ -1,6 +1,8 @@
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useMemo, useState } from 'react';
-import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { shouldHideSettingsTab } from './src/config/defaultSettingsConfig';
 import { HistoryScreen } from './src/screens/HistoryScreen';
 import { RecordScreen } from './src/screens/RecordScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
@@ -11,48 +13,72 @@ type Tab = 'record' | 'history' | 'settings';
 export default function App() {
   const [tab, setTab] = useState<Tab>('record');
   const [historyRefreshToken, setHistoryRefreshToken] = useState(0);
+  const [settingsTabHidden, setSettingsTabHidden] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const hidden = await shouldHideSettingsTab();
+      if (alive) setSettingsTabHidden(hidden);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (settingsTabHidden && tab === 'settings') {
+      setTab('record');
+    }
+  }, [settingsTabHidden, tab]);
 
   const handleHistoryUpdated = useCallback(() => {
     setHistoryRefreshToken((value) => value + 1);
   }, []);
 
   const body = useMemo(() => {
-    if (tab === 'settings') return <SettingsScreen />;
+    if (!settingsTabHidden && tab === 'settings') return <SettingsScreen />;
     if (tab === 'history') return <HistoryScreen refreshToken={historyRefreshToken} />;
     return <RecordScreen onHistoryUpdated={handleHistoryUpdated} />;
   }, [handleHistoryUpdated, historyRefreshToken, tab]);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar style="dark" />
-      <View style={styles.container}>
-        <Text style={styles.title}>Project Context</Text>
-        <Text style={styles.subtitle}>Capture first. Understand later.</Text>
+    <SafeAreaProvider>
+      <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
+        <StatusBar backgroundColor="transparent" style="dark" translucent />
+        <View style={styles.container}>
+          <Text style={styles.title}>Project Context</Text>
+          <Text style={styles.subtitle}>Capture first. Understand later.</Text>
 
-        <View style={styles.tabRow}>
-          <Pressable
-            onPress={() => setTab('record')}
-            style={[styles.tabButton, tab === 'record' ? styles.tabButtonActive : null]}
-          >
-            <Text style={[styles.tabLabel, tab === 'record' ? styles.tabLabelActive : null]}>Record</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => setTab('history')}
-            style={[styles.tabButton, tab === 'history' ? styles.tabButtonActive : null]}
-          >
-            <Text style={[styles.tabLabel, tab === 'history' ? styles.tabLabelActive : null]}>History</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => setTab('settings')}
-            style={[styles.tabButton, tab === 'settings' ? styles.tabButtonActive : null]}
-          >
-            <Text style={[styles.tabLabel, tab === 'settings' ? styles.tabLabelActive : null]}>Settings</Text>
-          </Pressable>
+          <View style={styles.tabRow}>
+            <Pressable
+              onPress={() => setTab('record')}
+              style={[styles.tabButton, tab === 'record' ? styles.tabButtonActive : null]}
+            >
+              <Text style={[styles.tabLabel, tab === 'record' ? styles.tabLabelActive : null]}>Record</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setTab('history')}
+              style={[styles.tabButton, tab === 'history' ? styles.tabButtonActive : null]}
+            >
+              <Text style={[styles.tabLabel, tab === 'history' ? styles.tabLabelActive : null]}>History</Text>
+            </Pressable>
+            {!settingsTabHidden ? (
+              <Pressable
+                onPress={() => setTab('settings')}
+                style={[styles.tabButton, tab === 'settings' ? styles.tabButtonActive : null]}
+              >
+                <Text style={[styles.tabLabel, tab === 'settings' ? styles.tabLabelActive : null]}>
+                  Settings
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
+
+          {body}
         </View>
-
-        {body}
-      </View>
-    </SafeAreaView>
+      </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
 
