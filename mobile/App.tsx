@@ -2,6 +2,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { RecordingProvider } from './src/recording/RecordingProvider';
 import { shouldHideSettingsTab } from './src/config/defaultSettingsConfig';
 import { HistoryScreen } from './src/screens/HistoryScreen';
 import { RecordScreen } from './src/screens/RecordScreen';
@@ -39,8 +40,8 @@ export default function App() {
   const body = useMemo(() => {
     if (!settingsTabHidden && tab === 'settings') return <SettingsScreen />;
     if (tab === 'history') return <HistoryScreen refreshToken={historyRefreshToken} />;
-    return <RecordScreen onHistoryUpdated={handleHistoryUpdated} />;
-  }, [handleHistoryUpdated, historyRefreshToken, tab]);
+    return <RecordScreen />;
+  }, [historyRefreshToken, settingsTabHidden, tab]);
 
   return (
     <SafeAreaProvider>
@@ -75,7 +76,7 @@ export default function App() {
             ) : null}
           </View>
 
-          {body}
+          <RecordingProvider onHistoryUpdated={handleHistoryUpdated}>{body}</RecordingProvider>
         </View>
       </SafeAreaView>
     </SafeAreaProvider>

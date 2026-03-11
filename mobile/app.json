@@ -25,7 +25,7 @@
       },
       "predictiveBackGestureEnabled": false
     },
-    "plugins": ["./plugins/withProjectContextConfigAsset"],
+    "plugins": ["./plugins/withProjectContextConfigAsset", "./plugins/withRecordingKeepalive"],
     "web": {
       "favicon": "./assets/favicon.png"
     }
