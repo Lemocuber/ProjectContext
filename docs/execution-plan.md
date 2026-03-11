@@ -1,82 +1,53 @@
 # Execution Plan
 
-## Current Sprint Focus
-1. Lock corrected v1 scope and acceptance criteria in docs (file-ASR final pass model).
-2. Rework v1 in dependency order: capture/fallback persistence -> file ASR final pass -> markdown/title/export integration.
+## Current Sprint Focus (V2 Kickoff)
+1. Finalize V2 specs for recording keepalive, cloud history/artifact sync, and in-session AI suggestions.
+2. Implement keepalive foundation first (service ownership + Android foreground notification).
+3. Implement cloud sync model second (index/session metadata/artifact upload + history pull).
+4. Implement in-session "What do you think" third (realtime transcript window + cooldown + UI integration).
+5. Run integrated manual validation on Android lock/background/tab-switch and cross-device history sync.
 
-## Detailed Work Items
+## V2 Workstreams
 
-### 1) Baseline (as of 2026-03-02)
-- Session persistence: implemented (bounded recent list, completed/failed entries).
-- Session audio persistence: implemented (WAV saved locally and linked from history).
-- Realtime reliability guardrails: implemented (timeouts + reconnect/backoff + finalize fallback).
-- Final transcript path: realtime-derived, single transcript surface (no live/final split in v0).
-- History UX: implemented (History tab + detail card + in-app player with scrubber/timestamps).
-- Status: complete and accepted as v0 baseline.
+### Workstream A: Recording Keepalive
+- Move recording lifecycle ownership from `RecordScreen` to app-level orchestrator/service.
+- Ensure active recording survives:
+  - screen lock,
+  - app background transitions,
+  - in-app tab switches.
+- Add Android foreground notification while recording is active.
 
-### 2) Correction Note (as of 2026-03-06)
-- Previous v1 design incorrectly treated realtime ASR metadata as final transcript source.
-- Realtime ASR does not provide reliable diarization for v1 needs.
-- Finalized transcript metadata (timestamps/speakers/highlight anchoring) now requires post-record file ASR.
+### Workstream B: Cloud Storage + History Sync
+- Add remote artifact layout:
+  - `users/{userId}/index.json`,
+  - `users/{userId}/sessions/{sessionId}/session.json`,
+  - `users/{userId}/sessions/{sessionId}/audio.wav`,
+  - `users/{userId}/sessions/{sessionId}/transcript.md`.
+- Add pull-on-launch/history-refresh and push-on-finalize/state-update flows.
+- Keep local cache readable offline; retry failed cloud syncs on next trigger.
+- Enforce explicit rule: discarded recordings never upload and never alter remote index.
 
-### 3) Workstream A: Capture + Fallback (v1)
-- Add in-session highlight action during recording.
-- Persist highlight timestamps per session.
-- Persist unprocessed realtime transcript copy as fallback artifact.
-- Status: completed and validated.
+### Workstream C: In-Session AI Suggestions
+- Add "What do you think" action during recording.
+- Build prompt from bounded rolling realtime transcript context.
+- Enforce cooldown and single in-flight request behavior.
+- Return short actionable moment-level guidance.
 
-### 4) Workstream B: Post-Record Recognition + Vocabulary (v1)
-- Add COS staging path (BYOK upload) for recorded audio.
-- Add file ASR submission and async task polling after recording stops.
-- Add speaker diarization in finalized transcript structure from file ASR output.
-- Add pre-record speaker-mode selector and map options to final-pass diarization parameters.
-- Expose vocabulary configuration UI in Settings (multiline textarea, one term per line).
-- Sync textarea terms to customization API (`create_vocabulary`/`update_vocabulary`) and apply internal `vocabulary_id` to recognition requests.
-- Persist speaker-attributed transcript and vocabulary metadata in history item.
-- Add build-time settings defaults from bundled `assets/ProjectContext.config.json`:
-  - hide complete sections from Settings,
-  - discard incomplete sections,
-  - hide Settings tab when all four sections are complete.
-- Status: completed and validated.
+### Workstream D: Integration + Validation
+- Verify keepalive behavior across lock/background/tab-switch.
+- Verify discard path produces no remote objects.
+- Verify continue-finalize path uploads artifacts and updates cloud history.
+- Verify cross-device history visibility using same `userId`.
+- Verify in-session suggestion behavior under active recording.
 
-### 5) Workstream C: Transcript Artifact and Title (v1)
-- Generate finalized markdown transcript from post-record file ASR sentence results.
-- Provide fallback markdown content from raw realtime transcript when final pass fails.
-- Generate one concise session title from finalized transcript + highlights.
-- Apply fallback title immediately and replace with LLM title on completion.
-- Persist markdown URI, title, and generation status.
-- Status: completed and validated.
+## Validation Gates (V2 Target)
+- Typecheck and CI pass.
+- Android APK build pass on GitHub Actions.
+- Manual Android device matrix pass for all V2 acceptance criteria.
 
-### 6) Workstream D: Export Features (v1)
-- Auto-export markdown to `Downloads` after each finalized session.
-- Add manual markdown export action from history/detail.
-- Add manual audio export action from history/detail.
-- Ensure export works for completed sessions even after app restart.
-- Status: completed and validated for both final-pass success and fallback transcript sessions.
-
-## Validation Gates
-- Typecheck and CI: passed.
-- Android APK build on GitHub Actions: passed.
-- Manual phone test confirms end-to-end v1 flow:
-  - save API key and edit/clear multiline vocabulary setting in Settings
-  - start recording and place highlights
-  - transcript updates while speaking
-  - stop recording and finalize session
-  - raw realtime fallback transcript is persisted for the session
-  - COS staging path works (upload mode)
-  - signed URL expiry/fetch failure path is handled safely
-  - file ASR final pass status transitions are visible (`pending` -> `completed|failed`)
-  - idle-state speaker-mode selector shows one-line inline chips (`Auto/1/2/3`) with badge+icon only (no text labels)
-  - selected speaker mode maps correctly to final-pass request parameters (`diarization_enabled`, optional `speaker_count`)
-  - session appears in History with speaker-attributed transcript when final pass succeeds
-  - session fallback transcript remains usable when final pass fails
-  - fallback title appears, then LLM title replacement status is handled correctly
-  - finalized markdown format matches spec (header/time range/separator/sentence lines)
-  - markdown auto-export succeeds
-  - manual markdown and audio export both succeed
-- Gate target: completed (manual validation + CI/APK confirmation complete as of 2026-03-06).
-
-## References
-- `docs/v1/delivery-plan.md`
-- `docs/v1/technical-specification.md`
-- `docs/v1/implementation-report.md`
+## Archive Note
+- V1 execution plan and validation are completed and accepted as of 2026-03-06.
+- Detailed V1 implementation history remains in:
+  - `docs/v1/delivery-plan.md`
+  - `docs/v1/technical-specification.md`
+  - `docs/v1/implementation-report.md`
