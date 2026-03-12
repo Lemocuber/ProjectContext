@@ -42,12 +42,18 @@ import {
   saveCosSettings,
   type CosSettings,
 } from '../storage/cosSettingsStore';
+import {
+  loadCloudUserId,
+  looksLikeCloudUserId,
+  saveCloudUserId,
+} from '../storage/cloudUserIdStore';
 import { colors } from '../theme';
 
 export function SettingsScreen() {
   const [hiddenSections, setHiddenSections] = useState<{
     dashscope: boolean;
     deepseek: boolean;
+    cloudUserId: boolean;
     tencentCos: boolean;
     vocabulary: boolean;
   } | null>(null);
@@ -65,6 +71,8 @@ export function SettingsScreen() {
   const [cosRegion, setCosRegion] = useState('');
   const [cosSecretId, setCosSecretId] = useState('');
   const [cosSecretKey, setCosSecretKey] = useState('');
+  const [cloudUserId, setCloudUserId] = useState('');
+  const [savedCloudUserId, setSavedCloudUserId] = useState('');
 
   useEffect(() => {
     let alive = true;
@@ -74,10 +82,11 @@ export function SettingsScreen() {
       setHiddenSections(sections);
       const showDashScope = !sections.dashscope;
       const showDeepSeek = !sections.deepseek;
+      const showCloudUserId = !sections.cloudUserId;
       const showTencentCos = !sections.tencentCos;
       const showVocabulary = !sections.vocabulary;
 
-      const [dashScopeKey, deepSeekKey, vocabularySettings, cosSettings] = await Promise.all([
+      const [dashScopeKey, deepSeekKey, vocabularySettings, cosSettings, nextCloudUserId] = await Promise.all([
         showDashScope ? loadEffectiveDashScopeApiKey() : Promise.resolve<string | null>(null),
         showDeepSeek ? loadEffectiveDeepSeekApiKey() : Promise.resolve<string | null>(null),
         showVocabulary
@@ -96,6 +105,7 @@ export function SettingsScreen() {
               secretId: '',
               secretKey: '',
             }),
+        showCloudUserId ? loadCloudUserId() : Promise.resolve(''),
       ]);
       if (!alive) return;
 
@@ -110,6 +120,10 @@ export function SettingsScreen() {
       }
       if (showTencentCos) {
         hydrateCosSettings(cosSettings);
+      }
+      if (showCloudUserId) {
+        setCloudUserId(nextCloudUserId);
+        setSavedCloudUserId(nextCloudUserId);
       }
     })();
     return () => {
@@ -270,6 +284,18 @@ export function SettingsScreen() {
     Alert.alert('Cleared', 'COS settings removed.');
   };
 
+  const onSaveCloudUserId = async () => {
+    if (!looksLikeCloudUserId(cloudUserId)) {
+      Alert.alert('Invalid user ID', 'Use exactly 10 letters and numbers.');
+      return;
+    }
+
+    const saved = await saveCloudUserId(cloudUserId);
+    setCloudUserId(saved);
+    setSavedCloudUserId(saved);
+    Alert.alert('Saved', 'Cloud user ID updated.');
+  };
+
   if (!hiddenSections) {
     return (
       <ScrollView contentContainerStyle={styles.layout}>
@@ -282,24 +308,40 @@ export function SettingsScreen() {
 
   const showDashScope = !hiddenSections.dashscope;
   const showDeepSeek = !hiddenSections.deepseek;
+  const showCloudUserId = !hiddenSections.cloudUserId;
   const showTencentCos = !hiddenSections.tencentCos;
   const showVocabulary = !hiddenSections.vocabulary;
 
-  if (!showDashScope && !showDeepSeek && !showTencentCos && !showVocabulary) {
-    return (
-      <ScrollView contentContainerStyle={styles.layout}>
-        <View style={styles.card}>
-          <Text style={styles.title}>Settings managed by config asset</Text>
-          <Text style={styles.description}>
-            All settings sections are prefilled in assets/ProjectContext.config.json for this build.
-          </Text>
-        </View>
-      </ScrollView>
-    );
-  }
-
   return (
     <ScrollView contentContainerStyle={styles.layout}>
+      {showCloudUserId ? (
+        <View style={styles.card}>
+          <Text style={styles.title}>Cloud User ID</Text>
+          <Text style={styles.description}>
+            Sessions sync under this ID. Use the same value on another device to share History.
+          </Text>
+
+          <TextInput
+            autoCapitalize="none"
+            autoCorrect={false}
+            maxLength={10}
+            onChangeText={setCloudUserId}
+            placeholder="10 letters/numbers"
+            placeholderTextColor={colors.muted}
+            style={styles.input}
+            value={cloudUserId}
+          />
+
+          <View style={styles.row}>
+            <Pressable onPress={onSaveCloudUserId} style={styles.primaryButton}>
+              <Text style={styles.primaryButtonText}>Save</Text>
+            </Pressable>
+          </View>
+
+          <Text style={styles.savedLabel}>Current ID: {savedCloudUserId || 'Loading...'}</Text>
+        </View>
+      ) : null}
+
       {showDashScope ? (
         <View style={styles.card}>
           <Text style={styles.title}>DashScope API Key</Text>

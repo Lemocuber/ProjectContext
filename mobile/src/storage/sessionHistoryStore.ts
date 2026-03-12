@@ -1,12 +1,11 @@
-import * as SecureStore from 'expo-secure-store';
 import type {
   CloudSyncStatus,
   ExportMetadata,
   SessionHistoryItem,
   SessionHistoryStatus,
 } from '../types/session';
-
-const SESSION_HISTORY_KEY = 'session_history_v2';
+import { loadEffectiveCloudUserId } from '../config/defaultSettingsConfig';
+import { ensureParentDirectory, getHistoryFile } from './sessionStoragePaths';
 
 function isSessionStatus(value: unknown): value is SessionHistoryStatus {
   return value === 'completed' || value === 'failed';
@@ -52,6 +51,7 @@ function isSessionHistoryItem(value: unknown): value is SessionHistoryItem {
 
   const item = value as Record<string, unknown>;
   if (typeof item.id !== 'string') return false;
+  if (typeof item.ownerUserId !== 'string') return false;
   if (typeof item.startedAt !== 'string') return false;
   if (typeof item.endedAt !== 'string') return false;
   if (typeof item.updatedAt !== 'string') return false;
@@ -69,22 +69,13 @@ function isSessionHistoryItem(value: unknown): value is SessionHistoryItem {
   }
   if (typeof item.errorText !== 'undefined' && typeof item.errorText !== 'string') return false;
   if (typeof item.audioFileUri !== 'undefined' && typeof item.audioFileUri !== 'string') return false;
-  if (
-    typeof item.cloudSyncStatus !== 'undefined' &&
-    !isCloudSyncStatus(item.cloudSyncStatus)
-  ) {
+  if (typeof item.cloudSyncStatus !== 'undefined' && !isCloudSyncStatus(item.cloudSyncStatus)) {
     return false;
   }
-  if (
-    typeof item.cloudUpdatedAt !== 'undefined' &&
-    typeof item.cloudUpdatedAt !== 'string'
-  ) {
+  if (typeof item.cloudUpdatedAt !== 'undefined' && typeof item.cloudUpdatedAt !== 'string') {
     return false;
   }
-  if (
-    typeof item.remoteAudioKey !== 'undefined' &&
-    typeof item.remoteAudioKey !== 'string'
-  ) {
+  if (typeof item.remoteAudioKey !== 'undefined' && typeof item.remoteAudioKey !== 'string') {
     return false;
   }
   if (
@@ -96,16 +87,30 @@ function isSessionHistoryItem(value: unknown): value is SessionHistoryItem {
   return true;
 }
 
-async function saveSessionHistory(items: SessionHistoryItem[]): Promise<void> {
-  await SecureStore.setItemAsync(SESSION_HISTORY_KEY, JSON.stringify(items));
+async function resolveUserId(userId?: string): Promise<string> {
+  return userId || (await loadEffectiveCloudUserId());
 }
 
-export async function loadSessionHistory(): Promise<SessionHistoryItem[]> {
-  const raw = await SecureStore.getItemAsync(SESSION_HISTORY_KEY);
-  if (!raw) return [];
+async function saveSessionHistory(items: SessionHistoryItem[], userId?: string): Promise<void> {
+  const file = getHistoryFile(await resolveUserId(userId));
+  ensureParentDirectory(file);
+  if (!file.exists) file.create({ overwrite: true, intermediates: true });
+  file.write(JSON.stringify(items));
+}
+
+export async function replaceSessionHistory(
+  items: SessionHistoryItem[],
+  userId?: string,
+): Promise<void> {
+  await saveSessionHistory(items, userId);
+}
+
+export async function loadSessionHistory(userId?: string): Promise<SessionHistoryItem[]> {
+  const file = getHistoryFile(await resolveUserId(userId));
+  if (!file.exists) return [];
 
   try {
-    const parsed = JSON.parse(raw) as unknown;
+    const parsed = JSON.parse(await file.text()) as unknown;
     if (!Array.isArray(parsed)) return [];
     return parsed.filter((entry): entry is SessionHistoryItem => isSessionHistoryItem(entry));
   } catch {
@@ -113,25 +118,31 @@ export async function loadSessionHistory(): Promise<SessionHistoryItem[]> {
   }
 }
 
-export async function appendSessionHistory(item: SessionHistoryItem): Promise<SessionHistoryItem[]> {
-  const current = await loadSessionHistory();
+export async function appendSessionHistory(
+  item: SessionHistoryItem,
+  userId = item.ownerUserId,
+): Promise<SessionHistoryItem[]> {
+  const current = await loadSessionHistory(userId);
   const next = [item, ...current.filter((entry) => entry.id !== item.id)];
-  await saveSessionHistory(next);
+  await saveSessionHistory(next, userId);
   return next;
 }
 
 export async function updateSessionHistoryItem(
   id: string,
   updater: (item: SessionHistoryItem) => SessionHistoryItem,
+  userId?: string,
 ): Promise<SessionHistoryItem | null> {
-  const current = await loadSessionHistory();
+  const current = await loadSessionHistory(userId);
   let updated: SessionHistoryItem | null = null;
+  let nextUserId = userId;
   const next = current.map((item) => {
     if (item.id !== id) return item;
     updated = updater(item);
+     nextUserId = updated.ownerUserId;
     return updated;
   });
   if (!updated) return null;
-  await saveSessionHistory(next);
+  await saveSessionHistory(next, nextUserId);
   return updated;
 }

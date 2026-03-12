@@ -52,8 +52,15 @@ Date: 2026-03-11
 
 ## Object Layout
 - `users/{userId}/index.json`
-- `users/{userId}/sessions/{sessionId}/audio.wav`
-- `users/{userId}/sessions/{sessionId}/transcript.md`
+- `users/{userId}/recordings/{sessionId}.wav`
+- `users/{userId}/transcripts/{sessionId}.md`
+
+## Cloud Identity
+- `userId` is a locally persisted random 10-character alphanumeric string generated on first launch.
+- A valid `cloudUserId` in the bundled asset config overrides the stored/generated value using the same precedence model as the other settings.
+- When no config override is present, Settings exposes the current `userId` and allows manual edits so multiple devices can intentionally share the same remote History path.
+- The Cloud User ID settings section is hidden when the asset config already specifies `cloudUserId`.
+- Remote COS keys are derived from the current `userId` plus `sessionId`.
 
 ## `index.json` Purpose
 - Lightweight list for History tab loading:
@@ -68,6 +75,7 @@ Date: 2026-03-11
 
 ## Transcript Persistence Rule
 - `transcript.md` is the canonical persisted transcript artifact.
+- Both local and remote storage place it at `transcripts/{sessionId}.md` under the user root.
 - Raw transcript text is finalize-time working data only.
 - If final-pass succeeds, markdown is built from finalized sentences and highlight markers.
 - If final-pass is unavailable or fails, markdown is built from the fallback raw transcript.
@@ -77,6 +85,8 @@ Date: 2026-03-11
 - Remote artifact paths are deterministic from `sessionId`.
 - Because artifact locations are derivable, V2 does not require `session.json`.
 - Local storage follows the same strict-alignment rule: metadata in the history store, transcript body in the markdown artifact.
+- Local History metadata is stored in app-private per-user files rather than `SecureStore`.
+- Local transcript and audio artifacts live under per-user private directories so changing `userId` changes the visible local namespace too.
 
 ## Sync Model
 - Local-first cache remains available when offline.
@@ -90,7 +100,7 @@ Date: 2026-03-11
 - Conflict rule:
   - last-write-wins by `updatedAt`.
 - Failed sync writes:
-  - mark local item as `syncPending`,
+  - mark local item as `pending` or `failed`,
   - retry on next eligible sync trigger.
 
 ## History Tab Data Source Rule
@@ -118,6 +128,7 @@ Date: 2026-03-11
 
 ## Data Model Additions
 - `SessionHistoryItem` additions (proposed):
+  - `ownerUserId: string`,
   - `cloudSyncStatus?: "idle" | "pending" | "synced" | "failed"`,
   - `cloudUpdatedAt?: string`,
   - `remoteAudioKey?: string`,

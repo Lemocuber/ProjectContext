@@ -29,8 +29,15 @@ Define and implement the cloud session storage contract that V2 history sync dep
 
 ## Remote Object Layout
 - `users/{userId}/index.json`
-- `users/{userId}/sessions/{sessionId}/audio.wav`
-- `users/{userId}/sessions/{sessionId}/transcript.md`
+- `users/{userId}/recordings/{sessionId}.wav`
+- `users/{userId}/transcripts/{sessionId}.md`
+
+## Cloud Identity Rule
+- `userId` is a random 10-character `[0-9A-Za-z]` string generated on first launch and persisted locally.
+- A valid `cloudUserId` in the bundled asset config overrides the stored/generated value, matching the precedence model used by other settings.
+- When no config override is present, the current `userId` is visible and editable in Settings so another device can be pointed at the same remote history path.
+- The Settings section is hidden when `cloudUserId` is pre-specified in the bundled asset config.
+- Remote paths always resolve from the effective `userId`.
 
 ## Artifact Path Rule
 - Artifact paths are deterministic from `sessionId`.
@@ -56,6 +63,7 @@ Define and implement the cloud session storage contract that V2 history sync dep
 - Persist only data that the user should still see in History after finalize.
 - Do not persist intermediate finalize/runtime state in local or remote History storage.
 - The only persisted transcript representation is the finalized markdown artifact (`transcript.md` locally and remotely).
+  - Local and remote storage both place it at `transcripts/{sessionId}.md` under the user root.
 - Raw transcript text exists only as finalize-time working data used to produce the final markdown when final-pass is unavailable or fails.
 - `highlightTapsMs` lives only during recording/review and is discarded after markdown is built.
 - `finalizedSentences` lives only during finalize and is discarded after markdown is built.
@@ -63,10 +71,11 @@ Define and implement the cloud session storage contract that V2 history sync dep
 
 ## Local Model Changes
 - Trim persisted `SessionHistoryItem` to finalized History data plus local artifact references.
+- Persist local History metadata in app-private per-user JSON storage, not `SecureStore`.
 - Add:
+  - `ownerUserId: string`
   - `cloudSyncStatus?: "idle" | "pending" | "synced" | "failed"`
   - `cloudUpdatedAt?: string`
-  - `remoteSessionKey?: string`
   - `remoteAudioKey?: string`
   - `remoteMarkdownKey?: string`
 - Keep only local-only fields that History/export needs after finalize, such as local audio/markdown URIs and export metadata.
@@ -75,12 +84,13 @@ Define and implement the cloud session storage contract that V2 history sync dep
 - Do not persist full transcript text inline in local metadata; read it from the local markdown artifact when needed.
 - The chosen model for V2 is strict alignment, not cached transcript duplication.
 - V2 does not provide backward compatibility for older persisted session shapes.
+- Local metadata and local artifacts are both `userId`-scoped so switching `userId` behaves like switching accounts rather than merging device-global caches.
 
 ## Upload Rules
 - Upload starts only after the user explicitly chooses continue-finalize from review state.
 - Upload order:
-  1. Upload `audio.wav`
-  2. Upload `transcript.md`
+  1. Upload `recordings/{sessionId}.wav`
+  2. Upload `transcripts/{sessionId}.md`
   3. Read/merge/write `index.json`
 - If any step fails:
   - keep the local session completed,
@@ -99,7 +109,7 @@ Define and implement the cloud session storage contract that V2 history sync dep
 - Hydration behavior:
   - load local cache first,
   - replace or merge from remote index when reachable,
-  - fetch remote `transcript.md` and `audio.wav` lazily when the user opens session detail and the local artifact is missing.
+  - fetch remote `transcripts/{sessionId}.md` and `recordings/{sessionId}.wav` lazily when the user opens session detail and the local artifact is missing.
 - Conflict rule:
   - newer `updatedAt` wins.
 
@@ -119,7 +129,7 @@ Define and implement the cloud session storage contract that V2 history sync dep
 7. Add retry behavior for `failed` and `pending` cloud sync entries on later sync triggers.
 
 ## Validation Targets
-- Finalized session uploads `audio.wav`, `transcript.md`, and updates `index.json`.
+- Finalized session uploads `recordings/{sessionId}.wav`, `transcripts/{sessionId}.md`, and updates `index.json`.
 - Discarded review session performs no remote writes.
 - Same `userId` on a second device can see the uploaded session in History.
 - Offline launch still shows previously cached local history.
@@ -131,3 +141,7 @@ Define and implement the cloud session storage contract that V2 history sync dep
 - 2026-03-12: local history store now validates only the strict-alignment session shape and no longer includes migration/backward-compat logic.
 - 2026-03-12: History detail switched to load transcript content from markdown artifacts instead of inline stored text.
 - 2026-03-12: mobile typecheck passed after the local storage refactor.
+- 2026-03-12: remote sync service now uploads `audio.wav` + `transcript.md`, merges `index.json`, retries pending/failed entries on later sync triggers, and hydrates missing local artifacts lazily from cloud.
+- 2026-03-12: cloud `userId` is now generated on first launch and editable in Settings for cross-device history sharing.
+- 2026-03-13: local History metadata moved from `SecureStore` to app-private per-user JSON storage, and local audio/transcript artifact paths are now scoped by `ownerUserId`.
+- 2026-03-13: local and remote storage layouts were aligned around the same user-root structure: `index.json`, `recordings/{sessionId}.wav`, and `transcripts/{sessionId}.md`.

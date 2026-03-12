@@ -14,6 +14,7 @@ Date: 2026-03-11
 - Treat foreground service as required for recording keepalive on Android and surface explicit failure states when service drops.
 - Keep transcript/audio local draft durability independent from screen lifecycle.
 - Keep local and remote History schemas aligned and use deterministic `updatedAt` last-write-wins merge logic.
+- Keep local storage user-scoped as well as remote storage user-scoped so changing `userId` does not produce mixed-account History lists.
 - Preserve local completed session state even when cloud sync fails; retry on next sync trigger.
 - Enforce request cooldown + single in-flight policy for live suggestions.
 - Keep suggestion output concise and scoped to immediate next steps.
@@ -29,6 +30,7 @@ Date: 2026-03-11
 - "What do you think" runs during recording using realtime transcript context.
 - Live suggestions remain UI-only in V2 and are not stored in History data.
 - Prototype/internal usage does not require production-grade security hardening in V2 acceptance.
+- V2 cloud identity is a random 10-character alphanumeric `userId` generated on first launch unless a valid bundled `cloudUserId` override is present; the Settings section is shown only when the value is not config-managed.
 - Remote History storage mirrors finalized user-visible History data, not intermediate finalize/runtime state.
 - Highlight tap lists and finalized sentence lists are not retained after markdown generation completes.
 - V2 removes the built-in history entry count limit.

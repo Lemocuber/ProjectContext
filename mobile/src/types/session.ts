@@ -28,6 +28,7 @@ export type ExportMetadata = {
 
 export type SessionHistoryItem = {
   id: string;
+  ownerUserId: string;
   startedAt: string;
   endedAt: string;
   updatedAt: string;

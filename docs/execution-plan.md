@@ -21,8 +21,11 @@
 ### Workstream B: Cloud Storage + History Sync
 - Add remote artifact layout:
   - `users/{userId}/index.json`,
-  - `users/{userId}/sessions/{sessionId}/audio.wav`,
-  - `users/{userId}/sessions/{sessionId}/transcript.md`.
+  - `users/{userId}/recordings/{sessionId}.wav`,
+  - `users/{userId}/transcripts/{sessionId}.md`.
+- Generate a local 10-character cloud `userId` on first launch and expose it in Settings so another device can target the same path.
+- Allow asset-config `cloudUserId` override and hide that settings section when the build pre-specifies it.
+- Keep local History metadata and artifacts in per-user namespaces so switching `userId` swaps local cache scope too.
 - Add pull-on-launch/history-refresh and push-on-finalize/state-update flows.
 - Keep local cache readable offline; retry failed cloud syncs on next trigger.
 - Enforce explicit rule: discarded recordings never upload and never alter remote index.

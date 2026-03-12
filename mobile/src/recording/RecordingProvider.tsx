@@ -10,6 +10,7 @@ import {
 import { Platform, ToastAndroid } from 'react-native';
 import {
   getInternalRuntimeSettings,
+  loadEffectiveCloudUserId,
   loadEffectiveCosSettings,
   loadEffectiveDashScopeApiKey,
   loadEffectiveDeepSeekApiKey,
@@ -23,6 +24,7 @@ import { dashscopeRealtimeSessionService } from '../services/asr/dashscopeRealti
 import type { AsrEvent, AsrSession } from '../services/asr/types';
 import { cleanupCosObjectBestEffort, stageAudioToCos } from '../services/cos/cosStagingService';
 import { exportTextToDownloads } from '../services/export/downloadsExportService';
+import { uploadSessionToCloud } from '../services/history/cloudHistorySyncService';
 import {
   anchorHighlightTaps,
   buildFallbackTitle,
@@ -98,6 +100,7 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
   const startAtRef = useRef<string | null>(null);
   const startAtMsRef = useRef(0);
   const sessionIdRef = useRef('');
+  const ownerUserIdRef = useRef('');
   const persistedRef = useRef(false);
   const highlightTapsMsRef = useRef<number[]>([]);
   const finalPassSpeakerModeRef = useRef<FinalPassSpeakerMode>(DEFAULT_FINAL_PASS_SPEAKER_MODE);
@@ -128,6 +131,7 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
     startAtRef.current = null;
     startAtMsRef.current = 0;
     sessionIdRef.current = '';
+    ownerUserIdRef.current = '';
     persistedRef.current = false;
     highlightTapsMsRef.current = [];
     appliedVocabularyIdRef.current = undefined;
@@ -157,18 +161,21 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
   const persistSession = async (item: SessionHistoryItem) => {
     if (persistedRef.current || !sessionIdRef.current) return;
     persistedRef.current = true;
-    await appendSessionHistory(item);
+    await appendSessionHistory(item, item.ownerUserId);
     onHistoryUpdated?.();
   };
 
   const persistFailedSession = async (params: { audioFileUri?: string | null; message: string }) => {
-    if (!startAtRef.current || !sessionIdRef.current) return;
+    if (!startAtRef.current || !sessionIdRef.current || !ownerUserIdRef.current) return;
     const startedAt = startAtRef.current;
     const endedAt = new Date().toISOString();
     const transcript = transcriptRef.current.trim();
-    const transcriptMarkdownUri = transcript ? saveTranscriptMarkdown(sessionIdRef.current, transcript) : undefined;
+    const transcriptMarkdownUri = transcript
+      ? saveTranscriptMarkdown(ownerUserIdRef.current, sessionIdRef.current, transcript)
+      : undefined;
     await persistSession({
       id: sessionIdRef.current,
+      ownerUserId: ownerUserIdRef.current,
       startedAt,
       endedAt,
       updatedAt: endedAt,
@@ -187,9 +194,10 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
   };
 
   const finalizeCompletedSession = async (event: Extract<AsrEvent, { type: 'final' }>) => {
-    if (!startAtRef.current || !sessionIdRef.current) return;
+    if (!startAtRef.current || !sessionIdRef.current || !ownerUserIdRef.current) return;
 
     const startedAt = startAtRef.current;
+    const ownerUserId = ownerUserIdRef.current;
     const endedAt = new Date().toISOString();
     const fallbackTitle = buildFallbackTitle(startedAt);
     const deepSeekApiKey = (await loadEffectiveDeepSeekApiKey())?.trim() || '';
@@ -198,6 +206,7 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
     const cosSettings = await loadEffectiveCosSettings();
     const runtimeSettings = await getInternalRuntimeSettings();
     const canRunFinalPass = !!event.audioFileUri && hasCompleteCosSettings(cosSettings);
+    const initialCloudSyncStatus = event.audioFileUri ? 'pending' : 'idle';
 
     let sourceAudioRemoteUrl: string | undefined;
     let sourceAudioObjectKey: string | undefined;
@@ -206,6 +215,7 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
 
     await persistSession({
       id: sessionIdRef.current,
+      ownerUserId,
       startedAt,
       endedAt,
       updatedAt: endedAt,
@@ -213,7 +223,7 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
       title: fallbackTitle,
       previewText: buildTranscriptPreview(realtimeTranscriptRaw) || 'No transcript captured.',
       audioFileUri: event.audioFileUri ?? undefined,
-      cloudSyncStatus: 'idle',
+      cloudSyncStatus: initialCloudSyncStatus,
     });
 
     if (canRunFinalPass && event.audioFileUri) {
@@ -281,7 +291,7 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
       sentences: finalizedSentences.length ? finalizedSentences : undefined,
       fallbackTranscript: finalizedSentences.length ? undefined : realtimeTranscriptRaw,
     });
-    const transcriptMarkdownUri = saveTranscriptMarkdown(sessionIdRef.current, markdown);
+    const transcriptMarkdownUri = saveTranscriptMarkdown(ownerUserId, sessionIdRef.current, markdown);
     const previewText = buildTranscriptPreview(markdown) || 'No transcript captured.';
 
     let markdownAutoExportStatus: 'completed' | 'failed' = 'failed';
@@ -305,14 +315,21 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
       title: finalTitle,
       previewText,
       transcriptMarkdownUri,
+      cloudSyncStatus: item.audioFileUri ? 'pending' : 'idle',
       exportMetadata: {
         ...item.exportMetadata,
         markdownAutoExportStatus,
         markdownExportedAt: markdownAutoExportStatus === 'completed' ? new Date().toISOString() : undefined,
         markdownLastPath,
       },
-    }));
+    }), ownerUserId);
     onHistoryUpdated?.();
+
+    if (event.audioFileUri) {
+      setInfoText('Syncing session to cloud...');
+      await uploadSessionToCloud(sessionIdRef.current, ownerUserId);
+      onHistoryUpdated?.();
+    }
   };
 
   const start = async () => {
@@ -337,6 +354,7 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
     startAtRef.current = new Date().toISOString();
     startAtMsRef.current = Date.now();
     sessionIdRef.current = buildSessionId();
+    ownerUserIdRef.current = await loadEffectiveCloudUserId();
     persistedRef.current = false;
     highlightTapsMsRef.current = [];
     finalPassSpeakerModeRef.current = finalPassSpeakerMode;
@@ -354,6 +372,7 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
       await startRecordingKeepaliveNotification();
       sessionRef.current = await dashscopeRealtimeSessionService.start({
         apiKey,
+        userId: ownerUserIdRef.current,
         vocabularyId,
         onEvent: (event) => {
           if (event.type === 'live') {

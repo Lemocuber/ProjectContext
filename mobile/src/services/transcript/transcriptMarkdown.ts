@@ -1,7 +1,6 @@
-import { Directory, File, Paths } from 'expo-file-system';
+import { File } from 'expo-file-system';
 import type { FinalizedSentence } from '../../types/session';
-
-const TRANSCRIPTS_DIR_NAME = 'transcripts';
+import { ensureParentDirectory, getTranscriptsDirectory } from '../../storage/sessionStoragePaths';
 
 function pad2(value: number): string {
   return String(value).padStart(2, '0');
@@ -112,13 +111,9 @@ export function buildTranscriptPreview(text: string, maxLength = 120): string {
   return preview.length > maxLength ? `${preview.slice(0, maxLength)}...` : preview;
 }
 
-export function saveTranscriptMarkdown(sessionId: string, markdown: string): string {
-  const directory = new Directory(Paths.document, TRANSCRIPTS_DIR_NAME);
-  if (!directory.exists) {
-    directory.create({ idempotent: true, intermediates: true });
-  }
-
-  const file = new File(directory, `${sessionId}.md`);
+export function saveTranscriptMarkdown(userId: string, sessionId: string, markdown: string): string {
+  const file = new File(getTranscriptsDirectory(userId), `${sessionId}.md`);
+  ensureParentDirectory(file);
   file.create({ overwrite: true, intermediates: true });
   file.write(markdown);
   return file.uri;

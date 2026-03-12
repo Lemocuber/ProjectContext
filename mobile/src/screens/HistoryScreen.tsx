@@ -1,5 +1,6 @@
 import Slider from '@react-native-community/slider';
 import { Audio, type AVPlaybackStatus } from 'expo-av';
+import { File } from 'expo-file-system';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -12,6 +13,11 @@ import {
   View,
 } from 'react-native';
 import { exportFileToDownloads, exportTextToDownloads } from '../services/export/downloadsExportService';
+import {
+  ensureSessionAudioAvailable,
+  ensureSessionTranscriptAvailable,
+  syncHistoryWithCloud,
+} from '../services/history/cloudHistorySyncService';
 import {
   buildMarkdownFileName,
   loadTranscriptMarkdown,
@@ -41,6 +47,15 @@ const EMPTY_PLAYER_STATE: PlayerState = {
   positionMillis: 0,
 };
 
+function hasLocalArtifact(uri?: string): boolean {
+  return !!uri && new File(uri).exists;
+}
+
+function hasAudioArtifact(item: SessionHistoryItem | null): boolean {
+  if (!item) return false;
+  return hasLocalArtifact(item.audioFileUri) || !!item.remoteAudioKey;
+}
+
 export function HistoryScreen({ refreshToken }: HistoryScreenProps) {
   const [history, setHistory] = useState<SessionHistoryItem[]>([]);
   const [selectedItem, setSelectedItem] = useState<SessionHistoryItem | null>(null);
@@ -59,7 +74,13 @@ export function HistoryScreen({ refreshToken }: HistoryScreenProps) {
   const loadSeqRef = useRef(0);
 
   const refreshHistory = useCallback(async () => {
-    setHistory(await loadSessionHistory());
+    const local = await loadSessionHistory();
+    setHistory(local);
+    try {
+      setHistory(await syncHistoryWithCloud());
+    } catch {
+      setHistory(local);
+    }
   }, []);
 
   const syncPlayerFromStatus = useCallback((status: AVPlaybackStatus) => {
@@ -97,7 +118,16 @@ export function HistoryScreen({ refreshToken }: HistoryScreenProps) {
 
   const loadSoundForItem = useCallback(
     async (item: SessionHistoryItem): Promise<boolean> => {
-      if (!item.audioFileUri) return false;
+      let target = item;
+      if (!hasLocalArtifact(target.audioFileUri) && target.remoteAudioKey) {
+        const hydrated = await ensureSessionAudioAvailable(target.id);
+        if (hydrated) {
+          target = hydrated;
+          setSelectedItem((current) => (current?.id === hydrated.id ? hydrated : current));
+          setHistory(await loadSessionHistory());
+        }
+      }
+      if (!target.audioFileUri) return false;
 
       const seq = loadSeqRef.current + 1;
       loadSeqRef.current = seq;
@@ -108,7 +138,7 @@ export function HistoryScreen({ refreshToken }: HistoryScreenProps) {
       try {
         await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
         const { sound, status } = await Audio.Sound.createAsync(
-          { uri: item.audioFileUri },
+          { uri: target.audioFileUri },
           { shouldPlay: false },
           (nextStatus) => syncPlayerFromStatus(nextStatus),
         );
@@ -120,7 +150,7 @@ export function HistoryScreen({ refreshToken }: HistoryScreenProps) {
         }
 
         soundRef.current = sound;
-        soundOwnerRef.current = item.id;
+        soundOwnerRef.current = target.id;
         syncPlayerFromStatus(status);
         return true;
       } catch (error) {
@@ -143,7 +173,7 @@ export function HistoryScreen({ refreshToken }: HistoryScreenProps) {
       setSelectedTranscript('');
       setAudioError('');
       setTranscriptError('');
-      if (item.audioFileUri) {
+      if (hasLocalArtifact(item.audioFileUri)) {
         void loadSoundForItem(item);
       } else {
         void unloadSound();
@@ -164,7 +194,7 @@ export function HistoryScreen({ refreshToken }: HistoryScreenProps) {
 
   const togglePlayPause = useCallback(async () => {
     const item = selectedItem;
-    if (!item?.audioFileUri) return;
+    if (!item || !hasAudioArtifact(item)) return;
     setAudioError('');
 
     try {
@@ -239,8 +269,8 @@ export function HistoryScreen({ refreshToken }: HistoryScreenProps) {
   }, [refreshSelectedItem, selectedItem, showToast]);
 
   const exportAudio = useCallback(async () => {
-    const item = selectedItem;
-    if (!item || !item.audioFileUri) {
+    let item = selectedItem;
+    if (!item || !hasAudioArtifact(item)) {
       setExportError('No audio file available for this session.');
       return;
     }
@@ -248,6 +278,18 @@ export function HistoryScreen({ refreshToken }: HistoryScreenProps) {
     setExportError('');
     setExportingAudio(true);
     try {
+      if (!hasLocalArtifact(item.audioFileUri) && item.remoteAudioKey) {
+        const hydrated = await ensureSessionAudioAvailable(item.id);
+        if (hydrated) {
+          item = hydrated;
+          setSelectedItem((current) => (current?.id === hydrated.id ? hydrated : current));
+          setHistory(await loadSessionHistory());
+        }
+      }
+      if (!item.audioFileUri) {
+        throw new Error('No audio file available for this session.');
+      }
+
       const title = getSessionTitle(item);
       const fileName = `${buildMarkdownFileName(item.startedAt, title).replace(/\.md$/i, '')}.wav`;
       const exportedUri = await exportFileToDownloads({
@@ -317,9 +359,10 @@ export function HistoryScreen({ refreshToken }: HistoryScreenProps) {
 
   useEffect(() => {
     let cancelled = false;
-    const uri = selectedItem?.transcriptMarkdownUri;
+    const item = selectedItem;
+    const uri = item?.transcriptMarkdownUri;
 
-    if (!uri) {
+    if (!item) {
       setSelectedTranscript('');
       setTranscriptError('');
       return () => {
@@ -328,21 +371,37 @@ export function HistoryScreen({ refreshToken }: HistoryScreenProps) {
     }
 
     setTranscriptError('');
-    void loadTranscriptMarkdown(uri)
-      .then((content) => {
+    void (async () => {
+      try {
+        let target = item;
+        if ((!uri || !new File(uri).exists) && item.remoteMarkdownKey) {
+          const hydrated = await ensureSessionTranscriptAvailable(item.id);
+          if (hydrated) {
+            target = hydrated;
+            setSelectedItem((current) => (current?.id === hydrated.id ? hydrated : current));
+            setHistory(await loadSessionHistory());
+          }
+        }
+
+        if (!target.transcriptMarkdownUri) {
+          if (!cancelled) setSelectedTranscript('');
+          return;
+        }
+
+        const content = await loadTranscriptMarkdown(target.transcriptMarkdownUri);
         if (cancelled) return;
         setSelectedTranscript(content);
-      })
-      .catch((error) => {
+      } catch (error) {
         if (cancelled) return;
         setSelectedTranscript('');
         setTranscriptError(error instanceof Error ? error.message : 'Failed to load transcript.');
-      });
+      }
+    })();
 
     return () => {
       cancelled = true;
     };
-  }, [selectedItem?.id, selectedItem?.transcriptMarkdownUri]);
+  }, [selectedItem]);
 
   useEffect(
     () => () => {
@@ -374,7 +433,7 @@ export function HistoryScreen({ refreshToken }: HistoryScreenProps) {
                 <Text style={styles.itemTitle}>{getSessionTitle(item)}</Text>
                 <Text style={styles.itemPreview}>{previewText(item)}</Text>
                 <View style={styles.itemFooter}>
-                  {item.audioFileUri ? <Text style={styles.audioBadge}>Audio saved</Text> : null}
+                  {hasAudioArtifact(item) ? <Text style={styles.audioBadge}>Audio saved</Text> : null}
                   <Text style={styles.detailsHint}>Tap for details</Text>
                 </View>
               </Pressable>
@@ -417,7 +476,7 @@ export function HistoryScreen({ refreshToken }: HistoryScreenProps) {
 
                 <View style={styles.playerCard}>
                   <Text style={styles.label}>Audio Player</Text>
-                  {selectedItem.audioFileUri ? (
+                  {hasAudioArtifact(selectedItem) ? (
                     <>
                       <View style={styles.audioControls}>
                         <Pressable onPress={() => void togglePlayPause()} style={styles.audioButton}>

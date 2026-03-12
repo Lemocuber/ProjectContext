@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { RecordingProvider } from './src/recording/RecordingProvider';
 import { shouldHideSettingsTab } from './src/config/defaultSettingsConfig';
+import { syncHistoryWithCloud } from './src/services/history/cloudHistorySyncService';
 import { HistoryScreen } from './src/screens/HistoryScreen';
 import { RecordScreen } from './src/screens/RecordScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
@@ -22,6 +23,18 @@ export default function App() {
       const hidden = await shouldHideSettingsTab();
       if (alive) setSettingsTabHidden(hidden);
     })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    void syncHistoryWithCloud()
+      .then(() => {
+        if (alive) setHistoryRefreshToken((value) => value + 1);
+      })
+      .catch(() => undefined);
     return () => {
       alive = false;
     };

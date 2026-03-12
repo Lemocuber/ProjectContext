@@ -15,6 +15,7 @@ import {
   loadDeepSeekApiKey as loadStoredDeepSeekApiKey,
   looksLikeDeepSeekApiKey,
 } from '../storage/deepseekKeyStore';
+import { loadCloudUserId, looksLikeCloudUserId } from '../storage/cloudUserIdStore';
 import {
   loadVocabularySettings as loadStoredVocabularySettings,
   saveVocabularySettings,
@@ -26,6 +27,7 @@ type RawConfig = {
   dashScopeKey?: unknown;
   deepseekKey?: unknown;
   deepSeekKey?: unknown;
+  cloudUserId?: unknown;
   tencentCos?: {
     bucketId?: unknown;
     bucketRegion?: unknown;
@@ -49,6 +51,7 @@ type InternalRuntimeSettings = {
 type ParsedDefaults = {
   dashscopeKey?: string;
   deepseekKey?: string;
+  cloudUserId?: string;
   tencentCos?: CosSettings;
   vocabularyTerms?: string[];
   vocabularyRawText?: string;
@@ -58,6 +61,7 @@ type ParsedDefaults = {
 type HiddenSettingsSections = {
   dashscope: boolean;
   deepseek: boolean;
+  cloudUserId: boolean;
   tencentCos: boolean;
   vocabulary: boolean;
 };
@@ -88,6 +92,12 @@ function parseDeepSeekKey(config: RawConfig): string | undefined {
   const key = asTrimmedString(config.deepseekKey ?? config.deepSeekKey);
   if (!key || !looksLikeDeepSeekApiKey(key)) return undefined;
   return key;
+}
+
+function parseCloudUserId(config: RawConfig): string | undefined {
+  const value = asTrimmedString(config.cloudUserId);
+  if (!value || !looksLikeCloudUserId(value)) return undefined;
+  return value;
 }
 
 function parseTencentCos(config: RawConfig): CosSettings | undefined {
@@ -140,6 +150,7 @@ function parseDefaults(input: unknown): ParsedDefaults {
   return {
     dashscopeKey: parseDashScopeKey(config),
     deepseekKey: parseDeepSeekKey(config),
+    cloudUserId: parseCloudUserId(config),
     tencentCos: parseTencentCos(config),
     vocabularyTerms: vocabulary?.terms,
     vocabularyRawText: vocabulary?.rawText,
@@ -182,6 +193,7 @@ export async function getHiddenSettingsSections(): Promise<HiddenSettingsSection
   return {
     dashscope: !!defaults.dashscopeKey,
     deepseek: !!defaults.deepseekKey,
+    cloudUserId: !!defaults.cloudUserId,
     tencentCos: !!defaults.tencentCos,
     vocabulary: !!defaults.vocabularyTerms?.length,
   };
@@ -189,7 +201,19 @@ export async function getHiddenSettingsSections(): Promise<HiddenSettingsSection
 
 export async function shouldHideSettingsTab(): Promise<boolean> {
   const sections = await getHiddenSettingsSections();
-  return sections.dashscope && sections.deepseek && sections.tencentCos && sections.vocabulary;
+  return (
+    sections.dashscope &&
+    sections.deepseek &&
+    sections.cloudUserId &&
+    sections.tencentCos &&
+    sections.vocabulary
+  );
+}
+
+export async function loadEffectiveCloudUserId(): Promise<string> {
+  const defaults = await loadRuntimeConfig();
+  if (defaults.cloudUserId) return defaults.cloudUserId;
+  return loadCloudUserId();
 }
 
 export async function getInternalRuntimeSettings(): Promise<InternalRuntimeSettings> {

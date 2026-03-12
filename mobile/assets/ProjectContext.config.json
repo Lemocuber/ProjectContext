@@ -1,6 +1,7 @@
 {
   "dashscopeKey": "",
   "deepseekKey": "",
+  "cloudUserId": "",
   "tencentCos": {
     "bucketId": "",
     "bucketRegion": "",

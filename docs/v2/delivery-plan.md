@@ -11,7 +11,10 @@ Date: 2026-03-11
 
 ## Milestone 2: Cloud Session Model and Sync
 - Status: current.
-- Define remote object layout (`index.json`, `audio.wav`, `transcript.md`).
+- Define remote object layout (`index.json`, `recordings/{sessionId}.wav`, `transcripts/{sessionId}.md`).
+- Generate a local 10-character cloud `userId` on first launch and expose it in Settings for cross-device pairing.
+- Support bundled `cloudUserId` override in config asset and hide the Cloud User ID settings section when preset.
+- Scope local metadata and local artifacts by `userId` so switching IDs swaps the visible local History namespace.
 - Add cloud push pipeline on finalize and metadata changes.
 - Add cloud pull pipeline for History tab and startup hydration.
 - Implement local cache + sync status states (`pending/synced/failed`).

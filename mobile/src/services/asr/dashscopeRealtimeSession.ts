@@ -1,8 +1,8 @@
 import { Buffer } from 'buffer';
-import { Directory, File, Paths } from 'expo-file-system';
 import LiveAudioStream from 'react-native-live-audio-stream';
 import { PermissionsAndroid, Platform } from 'react-native';
 import type { FinalizedSentence } from '../../types/session';
+import { saveSessionAudioBase64 } from '../audio/sessionAudio';
 import type { AsrSession, AsrSessionService } from './types';
 
 const DASHSCOPE_WS_URL = 'wss://dashscope.aliyuncs.com/api-ws/v1/inference/';
@@ -15,8 +15,6 @@ const AUDIO_STOP_TIMEOUT_MS = 1500;
 const STOP_HARD_TIMEOUT_MS = 12000;
 const RECONNECT_DELAYS_MS = [800, 1600, 3200];
 const MAX_RECONNECT_ATTEMPTS = RECONNECT_DELAYS_MS.length;
-const RECORDINGS_DIR_NAME = 'recordings';
-
 const AUDIO_OPTIONS = {
   sampleRate: 16000,
   channels: 1,
@@ -174,21 +172,17 @@ function buildWavHeader(dataSize: number): Buffer {
   return header;
 }
 
-function saveRecordingWav(taskId: string, chunks: Buffer[], totalBytes: number): string | null {
+function saveRecordingWav(
+  userId: string,
+  taskId: string,
+  chunks: Buffer[],
+  totalBytes: number,
+): string | null {
   if (!chunks.length || totalBytes <= 0) return null;
 
   try {
-    const recordingsDir = new Directory(Paths.document, RECORDINGS_DIR_NAME);
-    if (!recordingsDir.exists) {
-      recordingsDir.create({ intermediates: true, idempotent: true });
-    }
-
-    const outputFile = new File(recordingsDir, `${taskId}.wav`);
-    outputFile.create({ intermediates: true, overwrite: true });
-
     const wavData = Buffer.concat([buildWavHeader(totalBytes), ...chunks]);
-    outputFile.write(wavData.toString('base64'), { encoding: 'base64' });
-    return outputFile.uri;
+    return saveSessionAudioBase64(userId, taskId, wavData.toString('base64'));
   } catch {
     return null;
   }
@@ -209,7 +203,7 @@ async function requestMicPermission(): Promise<void> {
 }
 
 export const dashscopeRealtimeSessionService: AsrSessionService = {
-  async start({ apiKey, vocabularyId, onEvent }): Promise<AsrSession> {
+  async start({ apiKey, userId, vocabularyId, onEvent }): Promise<AsrSession> {
     await requestMicPermission();
 
     const finalizedSentences: FinalizedSentence[] = [];
@@ -283,7 +277,7 @@ export const dashscopeRealtimeSessionService: AsrSessionService = {
 
     const persistAudioOnce = () => {
       if (audioFileUri !== null) return audioFileUri;
-      audioFileUri = saveRecordingWav(recordingId, audioChunks, audioBytes);
+      audioFileUri = saveRecordingWav(userId, recordingId, audioChunks, audioBytes);
       return audioFileUri;
     };
 
