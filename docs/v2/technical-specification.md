@@ -199,6 +199,7 @@ Date: 2026-03-11
 
 ## Instrumentation Boundaries
 - Centralize capture helpers behind a small app-local diagnostics service rather than calling the provider SDK ad hoc from every screen/service.
+- Prefer sanitized service-specific breadcrumbs for ASR/DeepSeek/COS over raw network/provider breadcrumbs.
 - Initial instrumentation points:
   - app startup cloud sync,
   - recording start/stop/fail/discard/finalize transitions,

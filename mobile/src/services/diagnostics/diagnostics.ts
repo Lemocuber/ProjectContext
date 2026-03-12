@@ -21,6 +21,7 @@ type DiagnosticsBreadcrumb = {
 };
 
 const REDACTED = '[redacted]';
+const CAPTURED_ERROR_MARKER = Symbol('projectContextDiagnosticsCaptured');
 const SENSITIVE_KEY_PATTERN =
   /(api.?key|authorization|secret|token|credential|password|transcript|prompt|audio|file(uri|path)?|markdown|clouduserid|signed|signature|sourceaudioremoteurl|remote(audio|markdown)key|url)$/i;
 const SENSITIVE_BREADCRUMB_CATEGORY_PATTERN = /^(console|fetch|xhr|http)$/i;
@@ -187,15 +188,22 @@ export function captureDiagnosticsException(
   context?: DiagnosticsContext,
 ): string | undefined {
   if (!diagnosticsEnabled) return undefined;
+  if (error instanceof Error && (error as Error & { [CAPTURED_ERROR_MARKER]?: boolean })[CAPTURED_ERROR_MARKER]) {
+    return undefined;
+  }
   const normalized =
     error instanceof Error
       ? error
       : new Error(typeof error === 'string' ? sanitizeString(error) : 'Unknown diagnostics error.');
 
-  return Sentry.withScope((scope) => {
+  const eventId = Sentry.withScope((scope) => {
     applyContext(scope, context);
     return Sentry.captureException(normalized);
   });
+  if (normalized instanceof Error) {
+    (normalized as Error & { [CAPTURED_ERROR_MARKER]?: boolean })[CAPTURED_ERROR_MARKER] = true;
+  }
+  return eventId;
 }
 
 export function captureDiagnosticsMessage(

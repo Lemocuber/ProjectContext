@@ -20,7 +20,6 @@ import { generateLiveSuggestions } from '../services/ai/deepseekLiveSuggestionSe
 import {
   addDiagnosticsBreadcrumb,
   captureDiagnosticsException,
-  captureDiagnosticsMessage,
 } from '../services/diagnostics/diagnostics';
 import {
   runDashScopeRecordedFinalPass,
@@ -484,11 +483,10 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
           setStatus('failed');
           setInfoText('');
           setIsStopping(false);
-          captureDiagnosticsMessage(event.message, {
-            extras: { hasAudioFile: !!event.audioFileUri },
-            feature: 'recording',
-            level: 'error',
-            stage: 'session_event',
+          addDiagnosticsBreadcrumb({
+            category: 'recording.lifecycle',
+            level: 'warning',
+            message: 'Recording session emitted a terminal error event.',
           });
           resetSpeakerMode();
           void persistFailedSession({

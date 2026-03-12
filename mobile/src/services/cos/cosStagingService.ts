@@ -1,6 +1,10 @@
 import { Buffer } from 'buffer';
 import { File } from 'expo-file-system';
 import type { CosSettings } from '../../storage/cosSettingsStore';
+import {
+  addDiagnosticsBreadcrumb,
+  captureDiagnosticsException,
+} from '../diagnostics/diagnostics';
 import { buildSignedCosUrl } from './cosSigning';
 
 export type CosStagedAudio = {
@@ -24,6 +28,10 @@ async function uploadToCos(params: {
   audioFileUri: string;
   signedUrlTtlSec: number;
 }): Promise<void> {
+  addDiagnosticsBreadcrumb({
+    category: 'cos.staging',
+    message: 'COS audio upload started.',
+  });
   const uploadUrl = buildSignedCosUrl({
     method: 'PUT',
     bucket: params.settings.cosBucket,
@@ -47,8 +55,19 @@ async function uploadToCos(params: {
   });
   if (!response.ok) {
     const detail = await response.text().catch(() => '');
-    throw new Error(`COS upload failed (${response.status}): ${detail || 'unknown error'}`);
+    const error = new Error(`COS upload failed (${response.status}): ${detail || 'unknown error'}`);
+    captureDiagnosticsException(error, {
+      feature: 'cos_staging',
+      level: 'error',
+      stage: 'upload_audio',
+      tags: { httpStatus: response.status },
+    });
+    throw error;
   }
+  addDiagnosticsBreadcrumb({
+    category: 'cos.staging',
+    message: 'COS audio upload completed.',
+  });
 }
 
 export async function stageAudioToCos(params: {
@@ -76,6 +95,10 @@ export async function stageAudioToCos(params: {
     secretKey: params.settings.secretKey,
     expiresSec: params.signedUrlTtlSec,
   });
+  addDiagnosticsBreadcrumb({
+    category: 'cos.staging',
+    message: 'COS staging returned a signed source URL.',
+  });
   return { objectKey, sourceAudioRemoteUrl };
 }
 
@@ -98,7 +121,16 @@ export async function cleanupCosObjectBestEffort(params: {
     });
 
     await fetch(deleteUrl, { method: 'DELETE' });
-  } catch {
-    // best effort cleanup
+  } catch (error) {
+    addDiagnosticsBreadcrumb({
+      category: 'cos.staging',
+      level: 'warning',
+      message: 'COS cleanup failed during best-effort delete.',
+    });
+    captureDiagnosticsException(error, {
+      feature: 'cos_staging',
+      level: 'warning',
+      stage: 'cleanup',
+    });
   }
 }

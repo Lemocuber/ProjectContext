@@ -71,3 +71,9 @@ Add privacy-safe remote diagnostics for V2 so crashes and high-value operational
 - Diagnostics payloads contain no transcript text, prompt context, secrets, signed URLs, or raw audio.
 - Settings stays visible even when all other settings inputs are config-managed.
 - Manual report flow works from Settings and remains non-blocking.
+
+## Implementation Status
+- Added a shared diagnostics adapter with scrubbing, app bootstrap, and root wrapping.
+- Added a permanent Settings diagnostics section with manual report submission and support-info sharing.
+- Added sanitized service-level breadcrumbs and terminal failure capture for ASR, DeepSeek, and COS flows.
+- `mobile` typecheck passed after the provider-specific diagnostics pass.

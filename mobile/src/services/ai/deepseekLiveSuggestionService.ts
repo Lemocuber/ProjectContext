@@ -1,4 +1,8 @@
 import { buildLiveSuggestionPromptContext } from './promptContext';
+import {
+  addDiagnosticsBreadcrumb,
+  captureDiagnosticsException,
+} from '../diagnostics/diagnostics';
 
 const DEEPSEEK_CHAT_URL = 'https://api.deepseek.com/chat/completions';
 
@@ -38,6 +42,10 @@ export async function generateLiveSuggestions(params: {
     throw new Error('Cannot generate suggestions from empty transcript.');
   }
 
+  addDiagnosticsBreadcrumb({
+    category: 'deepseek.live_suggestion',
+    message: 'DeepSeek live suggestion request started.',
+  });
   const response = await fetch(DEEPSEEK_CHAT_URL, {
     method: 'POST',
     headers: {
@@ -71,17 +79,41 @@ export async function generateLiveSuggestions(params: {
   }
 
   if (!response.ok) {
-    throw new Error(raw || `DeepSeek request failed: HTTP ${response.status}`);
+    const error = new Error(raw || `DeepSeek request failed: HTTP ${response.status}`);
+    captureDiagnosticsException(error, {
+      feature: 'deepseek_live_suggestion',
+      level: 'error',
+      stage: 'http_response',
+      tags: { httpStatus: response.status },
+    });
+    throw error;
   }
 
   const content = parsed?.choices?.[0]?.message?.content?.trim();
   if (!content) {
-    throw new Error('DeepSeek returned no suggestion content.');
+    const error = new Error('DeepSeek returned no suggestion content.');
+    captureDiagnosticsException(error, {
+      feature: 'deepseek_live_suggestion',
+      level: 'error',
+      stage: 'empty_content',
+    });
+    throw error;
   }
 
   const suggestions = parseSuggestions(content);
   if (!suggestions.length) {
-    throw new Error('DeepSeek returned empty suggestions.');
+    const error = new Error('DeepSeek returned empty suggestions.');
+    captureDiagnosticsException(error, {
+      feature: 'deepseek_live_suggestion',
+      level: 'error',
+      stage: 'parse_result',
+    });
+    throw error;
   }
+  addDiagnosticsBreadcrumb({
+    category: 'deepseek.live_suggestion',
+    data: { count: suggestions.length },
+    message: 'DeepSeek live suggestion request completed.',
+  });
   return suggestions;
 }

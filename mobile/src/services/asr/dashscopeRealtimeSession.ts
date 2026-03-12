@@ -3,6 +3,10 @@ import LiveAudioStream from 'react-native-live-audio-stream';
 import { PermissionsAndroid, Platform } from 'react-native';
 import type { FinalizedSentence } from '../../types/session';
 import { saveSessionAudioBase64 } from '../audio/sessionAudio';
+import {
+  addDiagnosticsBreadcrumb,
+  captureDiagnosticsException,
+} from '../diagnostics/diagnostics';
 import type { AsrSession, AsrSessionService } from './types';
 
 const DASHSCOPE_WS_URL = 'wss://dashscope.aliyuncs.com/api-ws/v1/inference/';
@@ -190,7 +194,13 @@ function saveRecordingWav(
 
 async function requestMicPermission(): Promise<void> {
   if (Platform.OS !== 'android') {
-    throw new Error('Realtime recording is enabled for Android prototype only.');
+    const error = new Error('Realtime recording is enabled for Android prototype only.');
+    captureDiagnosticsException(error, {
+      feature: 'asr_realtime',
+      level: 'warning',
+      stage: 'platform_guard',
+    });
+    throw error;
   }
 
   const granted = await PermissionsAndroid.request(
@@ -198,12 +208,22 @@ async function requestMicPermission(): Promise<void> {
   );
 
   if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-    throw new Error('Microphone permission denied.');
+    const error = new Error('Microphone permission denied.');
+    captureDiagnosticsException(error, {
+      feature: 'asr_realtime',
+      level: 'warning',
+      stage: 'permission_denied',
+    });
+    throw error;
   }
 }
 
 export const dashscopeRealtimeSessionService: AsrSessionService = {
   async start({ apiKey, userId, vocabularyId, onEvent }): Promise<AsrSession> {
+    addDiagnosticsBreadcrumb({
+      category: 'asr.realtime',
+      message: 'Realtime ASR session start requested.',
+    });
     await requestMicPermission();
 
     const finalizedSentences: FinalizedSentence[] = [];
@@ -267,6 +287,14 @@ export const dashscopeRealtimeSessionService: AsrSessionService = {
     };
 
     const emitStatus = (message: string, reconnectingState: boolean) => {
+      if (reconnectingState || /recovered|resumed/i.test(message)) {
+        addDiagnosticsBreadcrumb({
+          category: 'asr.realtime',
+          data: { reconnecting: reconnectingState },
+          level: reconnectingState ? 'warning' : 'info',
+          message,
+        });
+      }
       onEvent({ type: 'status', message, reconnecting: reconnectingState });
     };
 
@@ -350,12 +378,23 @@ export const dashscopeRealtimeSessionService: AsrSessionService = {
       reconnecting = false;
       await stopAudio();
       closeSocket();
+      captureDiagnosticsException(new Error(message), {
+        extras: { reconnectAttempts },
+        feature: 'asr_realtime',
+        level: 'error',
+        stage: 'session_failed',
+      });
       onEvent({ type: 'error', message, audioFileUri: persistAudioOnce() });
       resolveOnce();
     };
 
     const connectSocket = () => {
       if (resolved || hasStopped) return;
+      addDiagnosticsBreadcrumb({
+        category: 'asr.realtime',
+        data: { reconnectAttempts },
+        message: 'Opening realtime ASR websocket.',
+      });
 
       currentTaskId = buildTaskId();
       const socket = new (WebSocket as any)(DASHSCOPE_WS_URL, undefined, {
@@ -375,6 +414,10 @@ export const dashscopeRealtimeSessionService: AsrSessionService = {
 
       socket.onopen = () => {
         if (ws !== socket) return;
+        addDiagnosticsBreadcrumb({
+          category: 'asr.realtime',
+          message: 'Realtime ASR websocket opened.',
+        });
 
         clearTimer(openTimer);
         openTimer = null;
@@ -432,6 +475,13 @@ export const dashscopeRealtimeSessionService: AsrSessionService = {
           taskStarted = true;
           reconnecting = false;
           reconnectAttempts = 0;
+          addDiagnosticsBreadcrumb({
+            category: 'asr.realtime',
+            data: { recovered },
+            message: recovered
+              ? 'Realtime ASR task restarted after reconnect.'
+              : 'Realtime ASR task started.',
+          });
 
           clearTimer(taskStartTimer);
           taskStartTimer = null;
@@ -513,6 +563,11 @@ export const dashscopeRealtimeSessionService: AsrSessionService = {
 
       socket.onerror = () => {
         if (resolved || hasStopped || ws !== socket) return;
+        addDiagnosticsBreadcrumb({
+          category: 'asr.realtime',
+          level: 'warning',
+          message: 'Realtime ASR websocket error event received.',
+        });
       };
 
       socket.onclose = () => {
@@ -521,6 +576,13 @@ export const dashscopeRealtimeSessionService: AsrSessionService = {
         ws = null;
         taskStarted = false;
         clearTransientTimers();
+        addDiagnosticsBreadcrumb({
+          category: 'asr.realtime',
+          level: hasStopped ? 'info' : 'warning',
+          message: hasStopped
+            ? 'Realtime ASR websocket closed after stop.'
+            : 'Realtime ASR websocket closed unexpectedly.',
+        });
 
         if (hasStopped) {
           void completeSession(false);
@@ -548,6 +610,12 @@ export const dashscopeRealtimeSessionService: AsrSessionService = {
 
       reconnecting = true;
       reconnectAttempts += 1;
+      addDiagnosticsBreadcrumb({
+        category: 'asr.realtime',
+        data: { reconnectAttempts },
+        level: 'warning',
+        message,
+      });
       emitStatus(
         `Connection interrupted. Reconnecting (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`,
         true,
@@ -586,6 +654,10 @@ export const dashscopeRealtimeSessionService: AsrSessionService = {
     const sendFinishTask = () => {
       if (finishSent || !ws || !taskStarted || ws.readyState !== WebSocket.OPEN) return;
       finishSent = true;
+      addDiagnosticsBreadcrumb({
+        category: 'asr.realtime',
+        message: 'Realtime ASR finish-task sent.',
+      });
 
       ws.send(
         JSON.stringify({
