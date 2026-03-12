@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import {
@@ -50,6 +51,7 @@ import {
 import { colors } from '../theme';
 
 export function SettingsScreen() {
+  const { height: viewportHeight } = useWindowDimensions();
   const [hiddenSections, setHiddenSections] = useState<{
     dashscope: boolean;
     deepseek: boolean;
@@ -314,34 +316,6 @@ export function SettingsScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.layout}>
-      {showCloudUserId ? (
-        <View style={styles.card}>
-          <Text style={styles.title}>Cloud User ID</Text>
-          <Text style={styles.description}>
-            Sessions sync under this ID. Use the same value on another device to share History.
-          </Text>
-
-          <TextInput
-            autoCapitalize="none"
-            autoCorrect={false}
-            maxLength={10}
-            onChangeText={setCloudUserId}
-            placeholder="10 letters/numbers"
-            placeholderTextColor={colors.muted}
-            style={styles.input}
-            value={cloudUserId}
-          />
-
-          <View style={styles.row}>
-            <Pressable onPress={onSaveCloudUserId} style={styles.primaryButton}>
-              <Text style={styles.primaryButtonText}>Save</Text>
-            </Pressable>
-          </View>
-
-          <Text style={styles.savedLabel}>Current ID: {savedCloudUserId || 'Loading...'}</Text>
-        </View>
-      ) : null}
-
       {showDashScope ? (
         <View style={styles.card}>
           <Text style={styles.title}>DashScope API Key</Text>
@@ -493,6 +467,36 @@ export function SettingsScreen() {
           {vocabularyError ? <Text style={styles.errorText}>{vocabularyError}</Text> : null}
         </View>
       ) : null}
+
+      {showCloudUserId ? (
+        <View style={styles.card}>
+          <Text style={styles.title}>Cloud User ID</Text>
+          <Text style={styles.description}>
+            Sessions sync under this ID. Use the same value on another device to share History.
+          </Text>
+
+          <TextInput
+            autoCapitalize="none"
+            autoCorrect={false}
+            maxLength={10}
+            onChangeText={setCloudUserId}
+            placeholder="10 letters/numbers"
+            placeholderTextColor={colors.muted}
+            style={styles.input}
+            value={cloudUserId}
+          />
+
+          <View style={styles.row}>
+            <Pressable onPress={onSaveCloudUserId} style={styles.primaryButton}>
+              <Text style={styles.primaryButtonText}>Save</Text>
+            </Pressable>
+          </View>
+
+          <Text style={styles.savedLabel}>Current ID: {savedCloudUserId || 'Loading...'}</Text>
+        </View>
+      ) : null}
+
+      <View style={[styles.bottomSpacer, { height: viewportHeight * 0.5 }]} />
     </ScrollView>
   );
 }
@@ -579,5 +583,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     marginTop: 8,
+  },
+  bottomSpacer: {
+    width: '100%',
   },
 });

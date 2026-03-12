@@ -151,7 +151,7 @@ export function RecordScreen() {
   return (
     <View style={styles.layout}>
       <View style={styles.statusPill}>
-        <Text style={styles.statusLabel}>Status: {statusLabel}</Text>
+        <Text style={styles.statusLabel}>{statusLabel}</Text>
       </View>
 
       <Pressable
@@ -192,7 +192,8 @@ export function RecordScreen() {
       ) : isRecording ? (
         <View style={styles.recordingActionsRow}>
           <Pressable onPress={markHighlight} style={[styles.actionButton, styles.highlightButton]}>
-            <Text style={styles.highlightButtonText}>Mark Highlight</Text>
+            <MaterialIcons color="#fff" name="flag" size={18} />
+            <Text style={styles.highlightButtonText}>Mark</Text>
           </Pressable>
           <Pressable
             disabled={isStopping || isRequestingSuggestion}
@@ -203,8 +204,9 @@ export function RecordScreen() {
               isStopping || isRequestingSuggestion ? styles.actionButtonDisabled : null,
             ]}
           >
+            <MaterialIcons color="#fff" name="emoji-objects" size={18} />
             <Text style={styles.suggestionButtonText}>
-              {isRequestingSuggestion ? 'Thinking...' : 'AI Insights'}
+              {isRequestingSuggestion ? 'Thinking...' : 'Insights'}
             </Text>
           </Pressable>
         </View>
@@ -231,13 +233,13 @@ export function RecordScreen() {
           })}
         </View>
       )}
-      <Text style={styles.recordingTimerText}>Timer: {formatClock(recordingElapsedMs)}</Text>
+      <Text style={styles.recordingTimerText}>{formatClock(recordingElapsedMs)}</Text>
 
       {errorText ? <Text style={styles.errorText}>{errorText}</Text> : null}
       {infoText ? <Text style={styles.infoText}>{infoText}</Text> : null}
       {suggestionStatusText || suggestionItems.length ? (
         <View style={styles.suggestionPanel}>
-          <Text style={styles.suggestionTitle}>AI Insights</Text>
+          <Text style={styles.suggestionTitle}>Insights</Text>
           {suggestionStatusText ? <Text style={styles.suggestionStatusText}>{suggestionStatusText}</Text> : null}
           {suggestionItems.map((item, index) => (
             <Text key={`${index}-${item}`} style={styles.suggestionItemText}>
@@ -313,6 +315,9 @@ const styles = StyleSheet.create({
   actionButton: {
     alignItems: 'center',
     borderRadius: 10,
+    flex: 1,
+    flexDirection: 'row',
+    gap: 6,
     height: 42,
     justifyContent: 'center',
   },
@@ -321,7 +326,6 @@ const styles = StyleSheet.create({
   },
   highlightButton: {
     backgroundColor: colors.ink,
-    flex: 0.95,
   },
   highlightButtonText: {
     color: '#fff',
@@ -330,7 +334,6 @@ const styles = StyleSheet.create({
   },
   suggestionButton: {
     backgroundColor: colors.accent,
-    flex: 1.3,
   },
   suggestionButtonText: {
     color: '#fff',
@@ -361,7 +364,7 @@ const styles = StyleSheet.create({
     flex: 0.9,
   },
   speakerModeChipSelected: {
-    backgroundColor: '#F5ECDF',
+    backgroundColor: '#F8E5BF',
     borderColor: '#D2B59B',
   },
   speakerModeChipDisabled: {

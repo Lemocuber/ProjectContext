@@ -422,7 +422,6 @@ export function HistoryScreen({ refreshToken }: HistoryScreenProps) {
   return (
     <View style={styles.layout}>
       <View style={styles.panel}>
-        <Text style={styles.sectionTitle}>Recent Sessions</Text>
         <ScrollView contentContainerStyle={styles.listWrap} style={styles.list}>
           {history.length ? (
             history.map((item) => (
@@ -432,10 +431,6 @@ export function HistoryScreen({ refreshToken }: HistoryScreenProps) {
                 </Text>
                 <Text style={styles.itemTitle}>{getSessionTitle(item)}</Text>
                 <Text style={styles.itemPreview}>{previewText(item)}</Text>
-                <View style={styles.itemFooter}>
-                  {hasAudioArtifact(item) ? <Text style={styles.audioBadge}>Audio saved</Text> : null}
-                  <Text style={styles.detailsHint}>Tap for details</Text>
-                </View>
               </Pressable>
             ))
           ) : (
@@ -454,7 +449,7 @@ export function HistoryScreen({ refreshToken }: HistoryScreenProps) {
           <Pressable onPress={() => void closeDetails()} style={styles.modalDismissArea} />
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Session Details</Text>
+              <Text style={styles.modalTitle}>{selectedItem ? getSessionTitle(selectedItem) : ''}</Text>
               <Pressable onPress={() => void closeDetails()} style={styles.closeButton}>
                 <Text style={styles.closeButtonText}>Close</Text>
               </Pressable>
@@ -462,11 +457,10 @@ export function HistoryScreen({ refreshToken }: HistoryScreenProps) {
 
             {selectedItem ? (
               <ScrollView contentContainerStyle={styles.modalBody}>
-                <Text style={styles.sessionTitle}>{getSessionTitle(selectedItem)}</Text>
                 <Text style={styles.detailMeta}>
                   {formatSessionRange(selectedItem.startedAt, selectedItem.endedAt)}
                 </Text>
-                <Text style={styles.detailMeta}>Status: {selectedItem.status}</Text>
+                <Text style={styles.detailMeta}>{selectedItem.status}</Text>
                 {selectedItem.exportMetadata?.markdownAutoExportStatus ? (
                   <Text style={styles.detailMeta}>
                     Auto-export: {selectedItem.exportMetadata.markdownAutoExportStatus}
@@ -475,7 +469,6 @@ export function HistoryScreen({ refreshToken }: HistoryScreenProps) {
                 {selectedItem.errorText ? <Text style={styles.errorText}>{selectedItem.errorText}</Text> : null}
 
                 <View style={styles.playerCard}>
-                  <Text style={styles.label}>Audio Player</Text>
                   {hasAudioArtifact(selectedItem) ? (
                     <>
                       <View style={styles.audioControls}>
@@ -516,7 +509,6 @@ export function HistoryScreen({ refreshToken }: HistoryScreenProps) {
                   {audioError ? <Text style={styles.errorText}>{audioError}</Text> : null}
                 </View>
 
-                <Text style={styles.label}>Full Transcript</Text>
                 <Text style={styles.transcriptText}>{selectedTranscript || 'No transcript captured.'}</Text>
                 {transcriptError ? <Text style={styles.errorText}>{transcriptError}</Text> : null}
 
@@ -608,15 +600,6 @@ const styles = StyleSheet.create({
     padding: 14,
     paddingTop: 8,
   },
-  sectionTitle: {
-    color: colors.muted,
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.4,
-    paddingHorizontal: 14,
-    paddingTop: 14,
-    textTransform: 'uppercase',
-  },
   item: {
     borderBottomColor: colors.border,
     borderBottomWidth: 1,
@@ -637,23 +620,6 @@ const styles = StyleSheet.create({
   itemTitle: {
     color: colors.ink,
     fontSize: 14,
-    fontWeight: '700',
-  },
-  itemFooter: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  audioBadge: {
-    color: colors.good,
-    fontSize: 12,
-    fontWeight: '700',
-    marginTop: 2,
-    textTransform: 'uppercase',
-  },
-  detailsHint: {
-    color: colors.muted,
-    fontSize: 12,
     fontWeight: '700',
   },
   emptyText: {
@@ -687,8 +653,10 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     color: colors.ink,
+    flex: 1,
     fontSize: 18,
     fontWeight: '800',
+    marginRight: 12,
   },
   closeButton: {
     borderColor: colors.border,
@@ -706,11 +674,6 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingBottom: 18,
   },
-  sessionTitle: {
-    color: colors.ink,
-    fontSize: 18,
-    fontWeight: '800',
-  },
   detailMeta: {
     color: colors.muted,
     fontSize: 12,
@@ -723,13 +686,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: 8,
     padding: 12,
-  },
-  label: {
-    color: colors.muted,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.4,
-    textTransform: 'uppercase',
   },
   audioControls: {
     alignItems: 'center',
