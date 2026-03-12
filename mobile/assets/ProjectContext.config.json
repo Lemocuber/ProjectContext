@@ -1,6 +1,7 @@
 {
   "dashscopeKey": "",
   "deepseekKey": "",
+  "cloudUserId": "",
   "tencentCos": {
     "bucketId": "",
     "bucketRegion": "",
@@ -11,6 +12,8 @@
   "internal": {
     "signedUrlTtl": 7200,
     "finalPassTimeout": 1800,
-    "cosCleanupEnabled": true
+    "cosCleanupEnabled": true,
+    "sentryDsn": "",
+    "sentryEnvironment": "production"
   }
 }

@@ -1,4 +1,8 @@
 import type { FinalPassFailureReason, FinalizedSentence } from '../../types/session';
+import {
+  addDiagnosticsBreadcrumb,
+  captureDiagnosticsException,
+} from '../diagnostics/diagnostics';
 
 const DASHSCOPE_RECORDED_RECOGNITION_URL =
   'https://dashscope.aliyuncs.com/api/v1/services/audio/asr/transcription';
@@ -349,53 +353,85 @@ export async function runDashScopeRecordedFinalPass(params: {
   speakerMode?: FinalPassSpeakerMode;
   onStatus?: (message: string) => void;
 }): Promise<{ taskId: string; finalizedSentences: FinalizedSentence[]; transcriptText: string }> {
-  const taskId = await submitRecordedRecognitionTask({
-    apiKey: params.apiKey,
-    sourceAudioRemoteUrl: params.sourceAudioRemoteUrl,
-    vocabularyId: params.vocabularyId,
-    speakerMode: params.speakerMode,
+  addDiagnosticsBreadcrumb({
+    category: 'asr.final_pass',
+    data: { speakerMode: params.speakerMode || 'auto' },
+    message: 'Final-pass ASR request started.',
   });
-  params.onStatus?.('Final-pass recognition started.');
 
-  const deadline = Date.now() + Math.max(30_000, Math.floor(params.timeoutMs));
-  while (Date.now() < deadline) {
-    const task = await queryTaskOnce(params.apiKey, taskId);
-    maybeThrowApiError(task, 'File ASR task failed.');
+  try {
+    const taskId = await submitRecordedRecognitionTask({
+      apiKey: params.apiKey,
+      sourceAudioRemoteUrl: params.sourceAudioRemoteUrl,
+      vocabularyId: params.vocabularyId,
+      speakerMode: params.speakerMode,
+    });
+    addDiagnosticsBreadcrumb({
+      category: 'asr.final_pass',
+      message: 'Final-pass ASR task accepted.',
+    });
+    params.onStatus?.('Final-pass recognition started.');
 
-    const status = asString(task.output?.task_status).toUpperCase();
-    if (status === 'SUCCEEDED') {
-      const transcriptionUrl = transcriptionUrlFromTask(task);
-      if (!transcriptionUrl) {
-        throw new FinalPassError(
-          'recognition_failed',
-          'File ASR succeeded but returned no transcription_url.',
+    const deadline = Date.now() + Math.max(30_000, Math.floor(params.timeoutMs));
+    while (Date.now() < deadline) {
+      const task = await queryTaskOnce(params.apiKey, taskId);
+      maybeThrowApiError(task, 'File ASR task failed.');
+
+      const status = asString(task.output?.task_status).toUpperCase();
+      if (status === 'SUCCEEDED') {
+        const transcriptionUrl = transcriptionUrlFromTask(task);
+        if (!transcriptionUrl) {
+          throw new FinalPassError(
+            'recognition_failed',
+            'File ASR succeeded but returned no transcription_url.',
+          );
+        }
+
+        addDiagnosticsBreadcrumb({
+          category: 'asr.final_pass',
+          message: 'Final-pass ASR result is ready. Fetching transcript payload.',
+        });
+        params.onStatus?.('Parsing final-pass transcript...');
+        const payload = await fetchTranscriptionPayload({
+          apiKey: params.apiKey,
+          transcriptionUrl,
+        });
+        const transcriptText = pickFallbackTranscript(payload);
+        const finalizedSentences = toFinalizedSentences(
+          collectSentenceRecords(payload),
+          transcriptText,
         );
+        addDiagnosticsBreadcrumb({
+          category: 'asr.final_pass',
+          data: { sentenceCount: finalizedSentences.length },
+          message: 'Final-pass ASR completed successfully.',
+        });
+        return {
+          taskId,
+          finalizedSentences,
+          transcriptText: finalizedSentences.map((entry) => entry.text).join(' ').trim() || transcriptText,
+        };
       }
 
-      params.onStatus?.('Parsing final-pass transcript...');
-      const payload = await fetchTranscriptionPayload({
-        apiKey: params.apiKey,
-        transcriptionUrl,
-      });
-      const transcriptText = pickFallbackTranscript(payload);
-      const finalizedSentences = toFinalizedSentences(
-        collectSentenceRecords(payload),
-        transcriptText,
-      );
-      return {
-        taskId,
-        finalizedSentences,
-        transcriptText: finalizedSentences.map((entry) => entry.text).join(' ').trim() || transcriptText,
-      };
+      if (status === 'FAILED' || status === 'CANCELED') {
+        throw new FinalPassError('recognition_failed', `File ASR task ${status.toLowerCase()}.`);
+      }
+
+      params.onStatus?.(`Final-pass status: ${status || 'pending'}...`);
+      await delay(POLL_INTERVAL_MS);
     }
 
-    if (status === 'FAILED' || status === 'CANCELED') {
-      throw new FinalPassError('recognition_failed', `File ASR task ${status.toLowerCase()}.`);
-    }
-
-    params.onStatus?.(`Final-pass status: ${status || 'pending'}...`);
-    await delay(POLL_INTERVAL_MS);
+    throw new FinalPassError('timeout', 'File ASR final pass timed out.');
+  } catch (error) {
+    captureDiagnosticsException(error, {
+      extras: {
+        speakerMode: params.speakerMode || 'auto',
+        timeoutMs: params.timeoutMs,
+      },
+      feature: 'asr_final_pass',
+      level: 'error',
+      stage: 'run',
+    });
+    throw error;
   }
-
-  throw new FinalPassError('timeout', 'File ASR final pass timed out.');
 }

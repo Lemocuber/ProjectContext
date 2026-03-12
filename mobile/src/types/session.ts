@@ -8,6 +8,7 @@ export type FinalPassFailureReason =
   | 'unknown';
 
 export type SessionHistoryStatus = 'completed' | 'failed';
+export type CloudSyncStatus = 'idle' | 'pending' | 'synced' | 'failed';
 
 export type FinalizedSentence = {
   startMs: number;
@@ -27,29 +28,23 @@ export type ExportMetadata = {
 
 export type SessionHistoryItem = {
   id: string;
+  ownerUserId: string;
   startedAt: string;
   endedAt: string;
+  updatedAt: string;
   status: SessionHistoryStatus;
-  transcript: string;
-  realtimeTranscriptRaw: string;
-  fallbackTitle: string;
-  highlightTapsMs: number[];
-  finalizedSentences?: FinalizedSentence[];
-  finalPassStatus?: FinalPassStatus;
-  finalPassTaskId?: string;
-  finalPassFailureReason?: FinalPassFailureReason;
-  sourceAudioRemoteUrl?: string;
-  sourceAudioObjectKey?: string;
-  appliedVocabularyId?: string;
-  appliedVocabularyTerms?: string[];
-  generatedTitle?: string;
-  titleStatus?: TitleStatus;
+  title: string;
+  previewText: string;
   transcriptMarkdownUri?: string;
   exportMetadata?: ExportMetadata;
   errorText?: string;
   audioFileUri?: string;
+  cloudSyncStatus?: CloudSyncStatus;
+  cloudUpdatedAt?: string;
+  remoteAudioKey?: string;
+  remoteMarkdownKey?: string;
 };
 
 export function getSessionTitle(item: SessionHistoryItem): string {
-  return item.generatedTitle?.trim() || item.fallbackTitle;
+  return item.title.trim();
 }

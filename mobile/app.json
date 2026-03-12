@@ -2,7 +2,7 @@
   "expo": {
     "name": "Project Context",
     "slug": "project-context-mobile",
-    "version": "1.0.0",
+    "version": "1.2.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -12,20 +12,22 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "buildNumber": "2"
     },
     "android": {
       "package": "com.projectcontext.mobile",
       "permissions": ["RECORD_AUDIO"],
+      "versionCode": 2,
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#FEF0E6",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false
     },
-    "plugins": ["./plugins/withProjectContextConfigAsset"],
+    "plugins": ["./plugins/withProjectContextConfigAsset", "./plugins/withRecordingKeepalive"],
     "web": {
       "favicon": "./assets/favicon.png"
     }

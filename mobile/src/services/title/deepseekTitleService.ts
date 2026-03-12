@@ -1,3 +1,9 @@
+import { buildTitlePromptContext } from '../ai/promptContext';
+import {
+  addDiagnosticsBreadcrumb,
+  captureDiagnosticsException,
+} from '../diagnostics/diagnostics';
+
 const DEEPSEEK_CHAT_URL = 'https://api.deepseek.com/chat/completions';
 
 type DeepSeekChatResponse = {
@@ -15,18 +21,16 @@ function normalizeTitle(value: string): string {
 export async function generateSessionTitle(params: {
   apiKey: string;
   transcript: string;
-  highlights?: string[];
 }): Promise<string> {
-  const transcript = params.transcript.trim();
+  const transcript = buildTitlePromptContext(params.transcript);
   if (!transcript) {
     throw new Error('Cannot generate title from empty transcript.');
   }
 
-  const highlightsBlock =
-    params.highlights && params.highlights.length
-      ? `\nHighlights:\n${params.highlights.map((entry) => `- ${entry}`).join('\n')}`
-      : '';
-
+  addDiagnosticsBreadcrumb({
+    category: 'deepseek.title',
+    message: 'DeepSeek title request started.',
+  });
   const response = await fetch(DEEPSEEK_CHAT_URL, {
     method: 'POST',
     headers: {
@@ -45,7 +49,7 @@ export async function generateSessionTitle(params: {
         },
         {
           role: 'user',
-          content: `Transcript:\n${transcript}${highlightsBlock}`,
+          content: `Transcript:\n${transcript}`,
         },
       ],
     }),
@@ -60,17 +64,40 @@ export async function generateSessionTitle(params: {
   }
 
   if (!response.ok) {
-    throw new Error(raw || `DeepSeek request failed: HTTP ${response.status}`);
+    const error = new Error(raw || `DeepSeek request failed: HTTP ${response.status}`);
+    captureDiagnosticsException(error, {
+      feature: 'deepseek_title',
+      level: 'error',
+      stage: 'http_response',
+      tags: { httpStatus: response.status },
+    });
+    throw error;
   }
 
   const content = parsed?.choices?.[0]?.message?.content;
   if (!content) {
-    throw new Error('DeepSeek returned no title content.');
+    const error = new Error('DeepSeek returned no title content.');
+    captureDiagnosticsException(error, {
+      feature: 'deepseek_title',
+      level: 'error',
+      stage: 'empty_content',
+    });
+    throw error;
   }
 
   const normalized = normalizeTitle(content);
   if (!normalized) {
-    throw new Error('Generated title was empty.');
+    const error = new Error('Generated title was empty.');
+    captureDiagnosticsException(error, {
+      feature: 'deepseek_title',
+      level: 'error',
+      stage: 'normalize_result',
+    });
+    throw error;
   }
+  addDiagnosticsBreadcrumb({
+    category: 'deepseek.title',
+    message: 'DeepSeek title request completed.',
+  });
   return normalized;
 }

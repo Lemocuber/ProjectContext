@@ -37,13 +37,16 @@ Project Context starts as an Android-first voice capture tool with real-time tra
 - Keep fallback title until LLM title generation completes.
 - If file ASR fails, keep a fallback transcript artifact sourced from stored raw realtime transcript.
 
-### Phase 4: Ask AI Insights (Planned)
-- Add "What do you think" action after session finalization.
-- Use transcript + highlights as prompt context.
-- Return concise actionable insights.
+### Phase 4: V2 Resilience + Cloud Sync + Live AI Assist (Completed 2026-03-13, Alpha 1.2.0)
+- Add recording keepalive on Android so active sessions survive screen lock, app backgrounding, and in-app tab changes.
+- Move recording/session lifecycle ownership from screen scope to persistent app-level service orchestration.
+- Add cloud-backed remote artifact storage (audio + transcript markdown + session metadata) with cross-device history sync.
+- Keep discard behavior local-only (no upload for discarded recordings).
+- Add in-session "What do you think" action during recording using realtime transcript context for immediate suggestions.
+- Add privacy-safe remote diagnostics and manual report support so field failures are debuggable.
 
-### Phase 5: Product Hardening (Planned)
-- Better observability and diagnostics.
+### Phase 5: Product Hardening (Future)
+- Deeper observability and diagnostics beyond the V2 baseline.
 - Improved offline/retry behavior.
 - Privacy controls and data governance.
 
@@ -51,5 +54,5 @@ Project Context starts as an Android-first voice capture tool with real-time tra
 - Phase 1: v0 accepted on-device with reliable realtime final transcripts and browseable local history.
 - Phase 2: users can mark key moments, complete post-record file ASR, and view speaker-attributed finalized transcripts with fallback when final pass fails.
 - Phase 3: users get fallback-to-LLM title behavior, finalized markdown transcripts, and reliable export flows.
-- Phase 4: users get useful context-aware AI feedback.
+- Phase 4: users keep recording continuity under lock/background/tab-switch, get cloud-synced history across devices, can request useful in-session AI suggestions, and expose actionable remote diagnostics without leaking transcript, prompt, or credential material.
 - Phase 5: stable enough for wider pilot use.

@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react';
 import {
   Alert,
   Pressable,
+  Share,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import {
@@ -15,6 +17,15 @@ import {
   loadEffectiveDeepSeekApiKey,
   loadEffectiveVocabularySettings,
 } from '../config/defaultSettingsConfig';
+import {
+  captureDiagnosticsException,
+  captureDiagnosticsMessage,
+  flushDiagnostics,
+  getDiagnosticsRelease,
+  getDiagnosticsSupportInfo,
+  initDiagnostics,
+  isDiagnosticsEnabled,
+} from '../services/diagnostics/diagnostics';
 import { syncDashScopeVocabulary, deleteDashScopeVocabulary } from '../services/vocabulary/dashscopeVocabularyService';
 import { prepareVocabulary } from '../services/vocabulary/vocabularyUtils';
 import {
@@ -42,12 +53,19 @@ import {
   saveCosSettings,
   type CosSettings,
 } from '../storage/cosSettingsStore';
+import {
+  loadCloudUserId,
+  looksLikeCloudUserId,
+  saveCloudUserId,
+} from '../storage/cloudUserIdStore';
 import { colors } from '../theme';
 
 export function SettingsScreen() {
+  const { height: viewportHeight } = useWindowDimensions();
   const [hiddenSections, setHiddenSections] = useState<{
     dashscope: boolean;
     deepseek: boolean;
+    cloudUserId: boolean;
     tencentCos: boolean;
     vocabulary: boolean;
   } | null>(null);
@@ -65,6 +83,13 @@ export function SettingsScreen() {
   const [cosRegion, setCosRegion] = useState('');
   const [cosSecretId, setCosSecretId] = useState('');
   const [cosSecretKey, setCosSecretKey] = useState('');
+  const [cloudUserId, setCloudUserId] = useState('');
+  const [savedCloudUserId, setSavedCloudUserId] = useState('');
+  const [diagnosticsBusy, setDiagnosticsBusy] = useState(false);
+  const [diagnosticsNote, setDiagnosticsNote] = useState('');
+  const [diagnosticsStatus, setDiagnosticsStatus] = useState('');
+  const [diagnosticsEnabled, setDiagnosticsEnabled] = useState(false);
+  const [supportInfo, setSupportInfo] = useState('');
 
   useEffect(() => {
     let alive = true;
@@ -74,10 +99,11 @@ export function SettingsScreen() {
       setHiddenSections(sections);
       const showDashScope = !sections.dashscope;
       const showDeepSeek = !sections.deepseek;
+      const showCloudUserId = !sections.cloudUserId;
       const showTencentCos = !sections.tencentCos;
       const showVocabulary = !sections.vocabulary;
 
-      const [dashScopeKey, deepSeekKey, vocabularySettings, cosSettings] = await Promise.all([
+      const [dashScopeKey, deepSeekKey, vocabularySettings, cosSettings, nextCloudUserId] = await Promise.all([
         showDashScope ? loadEffectiveDashScopeApiKey() : Promise.resolve<string | null>(null),
         showDeepSeek ? loadEffectiveDeepSeekApiKey() : Promise.resolve<string | null>(null),
         showVocabulary
@@ -96,6 +122,7 @@ export function SettingsScreen() {
               secretId: '',
               secretKey: '',
             }),
+        showCloudUserId ? loadCloudUserId() : Promise.resolve(''),
       ]);
       if (!alive) return;
 
@@ -111,6 +138,19 @@ export function SettingsScreen() {
       if (showTencentCos) {
         hydrateCosSettings(cosSettings);
       }
+      if (showCloudUserId) {
+        setCloudUserId(nextCloudUserId);
+        setSavedCloudUserId(nextCloudUserId);
+      }
+
+      await initDiagnostics();
+      const [enabled, info] = await Promise.all([
+        isDiagnosticsEnabled(),
+        getDiagnosticsSupportInfo(),
+      ]);
+      if (!alive) return;
+      setDiagnosticsEnabled(enabled);
+      setSupportInfo(info);
     })();
     return () => {
       alive = false;
@@ -199,6 +239,11 @@ export function SettingsScreen() {
       Alert.alert('Saved', 'Vocabulary synced and will apply to new recordings.');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Vocabulary sync failed.';
+      captureDiagnosticsException(error, {
+        feature: 'vocabulary',
+        level: 'warning',
+        stage: 'settings_sync',
+      });
       setVocabularyError(message);
       setVocabularySyncStatus('failed');
       await saveVocabularySettings({
@@ -270,6 +315,78 @@ export function SettingsScreen() {
     Alert.alert('Cleared', 'COS settings removed.');
   };
 
+  const onSaveCloudUserId = async () => {
+    if (!looksLikeCloudUserId(cloudUserId)) {
+      Alert.alert('Invalid user ID', 'Use exactly 10 letters and numbers.');
+      return;
+    }
+
+    const saved = await saveCloudUserId(cloudUserId);
+    setCloudUserId(saved);
+    setSavedCloudUserId(saved);
+    Alert.alert('Saved', 'Cloud user ID updated.');
+  };
+
+  const onSendDiagnosticsReport = async () => {
+    await initDiagnostics();
+    const enabled = await isDiagnosticsEnabled();
+    const currentSupportInfo = await getDiagnosticsSupportInfo();
+    setDiagnosticsEnabled(enabled);
+    setSupportInfo(currentSupportInfo);
+    if (!enabled) {
+      setDiagnosticsStatus('Diagnostics are disabled. Configure a Sentry DSN first.');
+      Alert.alert('Diagnostics disabled', 'Set `internal.sentryDsn` or `EXPO_PUBLIC_SENTRY_DSN` first.');
+      return;
+    }
+
+    setDiagnosticsBusy(true);
+    setDiagnosticsStatus('');
+    try {
+      const note = diagnosticsNote.trim();
+      const eventId = captureDiagnosticsMessage('Manual diagnostics report submitted.', {
+        extras: {
+          diagnosticsNote: note || undefined,
+          release: getDiagnosticsRelease(),
+          supportInfo: currentSupportInfo,
+        },
+        feature: 'manual_report',
+        level: 'info',
+        stage: 'settings',
+      });
+      await flushDiagnostics();
+      const status = eventId ? `Queued report ${eventId.slice(0, 8)}.` : 'Queued report.';
+      setDiagnosticsStatus(status);
+      setDiagnosticsNote('');
+      Alert.alert('Report sent', status);
+    } catch (error) {
+      captureDiagnosticsException(error, {
+        feature: 'manual_report',
+        level: 'warning',
+        stage: 'settings_send',
+      });
+      const message = error instanceof Error ? error.message : 'Diagnostics report failed.';
+      setDiagnosticsStatus(message);
+      Alert.alert('Report failed', message);
+    } finally {
+      setDiagnosticsBusy(false);
+    }
+  };
+
+  const onShareSupportInfo = async () => {
+    try {
+      const currentSupportInfo = await getDiagnosticsSupportInfo();
+      setSupportInfo(currentSupportInfo);
+      await Share.share({ message: currentSupportInfo });
+    } catch (error) {
+      captureDiagnosticsException(error, {
+        feature: 'manual_report',
+        level: 'warning',
+        stage: 'settings_share',
+      });
+      Alert.alert('Share failed', 'Unable to open the share sheet on this device.');
+    }
+  };
+
   if (!hiddenSections) {
     return (
       <ScrollView contentContainerStyle={styles.layout}>
@@ -282,21 +399,9 @@ export function SettingsScreen() {
 
   const showDashScope = !hiddenSections.dashscope;
   const showDeepSeek = !hiddenSections.deepseek;
+  const showCloudUserId = !hiddenSections.cloudUserId;
   const showTencentCos = !hiddenSections.tencentCos;
   const showVocabulary = !hiddenSections.vocabulary;
-
-  if (!showDashScope && !showDeepSeek && !showTencentCos && !showVocabulary) {
-    return (
-      <ScrollView contentContainerStyle={styles.layout}>
-        <View style={styles.card}>
-          <Text style={styles.title}>Settings managed by config asset</Text>
-          <Text style={styles.description}>
-            All settings sections are prefilled in assets/ProjectContext.config.json for this build.
-          </Text>
-        </View>
-      </ScrollView>
-    );
-  }
 
   return (
     <ScrollView contentContainerStyle={styles.layout}>
@@ -451,6 +556,72 @@ export function SettingsScreen() {
           {vocabularyError ? <Text style={styles.errorText}>{vocabularyError}</Text> : null}
         </View>
       ) : null}
+
+      {showCloudUserId ? (
+        <View style={styles.card}>
+          <Text style={styles.title}>Cloud User ID</Text>
+          <Text style={styles.description}>
+            Sessions sync under this ID. Use the same value on another device to share History.
+          </Text>
+
+          <TextInput
+            autoCapitalize="none"
+            autoCorrect={false}
+            maxLength={10}
+            onChangeText={setCloudUserId}
+            placeholder="10 letters/numbers"
+            placeholderTextColor={colors.muted}
+            style={styles.input}
+            value={cloudUserId}
+          />
+
+          <View style={styles.row}>
+            <Pressable onPress={onSaveCloudUserId} style={styles.primaryButton}>
+              <Text style={styles.primaryButtonText}>Save</Text>
+            </Pressable>
+          </View>
+
+          <Text style={styles.savedLabel}>Current ID: {savedCloudUserId || 'Loading...'}</Text>
+        </View>
+      ) : null}
+
+      <View style={styles.card}>
+        <Text style={styles.title}>Diagnostics</Text>
+        <Text style={styles.description}>
+          Send a manual diagnostics event and share support info. Do not include transcript text,
+          prompts, or keys in the note.
+        </Text>
+
+        <TextInput
+          autoCapitalize="sentences"
+          autoCorrect
+          multiline
+          onChangeText={setDiagnosticsNote}
+          placeholder="Short note about what went wrong"
+          placeholderTextColor={colors.muted}
+          style={styles.textarea}
+          textAlignVertical="top"
+          value={diagnosticsNote}
+        />
+
+        <View style={styles.row}>
+          <Pressable disabled={diagnosticsBusy} onPress={onSendDiagnosticsReport} style={styles.primaryButton}>
+            <Text style={styles.primaryButtonText}>{diagnosticsBusy ? 'Sending...' : 'Send Report'}</Text>
+          </Pressable>
+          <Pressable onPress={onShareSupportInfo} style={styles.secondaryButton}>
+            <Text style={styles.secondaryButtonText}>Share Info</Text>
+          </Pressable>
+        </View>
+
+        <Text style={styles.savedLabel}>Release: {getDiagnosticsRelease()}</Text>
+        <Text style={styles.savedLabel}>Diagnostics: {diagnosticsEnabled ? 'Enabled' : 'Disabled'}</Text>
+        {diagnosticsStatus ? <Text style={styles.savedLabel}>{diagnosticsStatus}</Text> : null}
+        <Text selectable style={styles.supportInfo}>
+          {supportInfo}
+        </Text>
+      </View>
+
+      <View style={[styles.bottomSpacer, { height: viewportHeight * 0.5 }]} />
     </ScrollView>
   );
 }
@@ -532,10 +703,19 @@ const styles = StyleSheet.create({
     color: colors.muted,
     marginTop: 14,
   },
+  supportInfo: {
+    color: colors.ink,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 12,
+  },
   errorText: {
     color: '#9D1A1A',
     fontSize: 13,
     fontWeight: '600',
     marginTop: 8,
+  },
+  bottomSpacer: {
+    width: '100%',
   },
 });

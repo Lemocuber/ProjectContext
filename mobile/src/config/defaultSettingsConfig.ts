@@ -15,6 +15,7 @@ import {
   loadDeepSeekApiKey as loadStoredDeepSeekApiKey,
   looksLikeDeepSeekApiKey,
 } from '../storage/deepseekKeyStore';
+import { loadCloudUserId, looksLikeCloudUserId } from '../storage/cloudUserIdStore';
 import {
   loadVocabularySettings as loadStoredVocabularySettings,
   saveVocabularySettings,
@@ -26,6 +27,7 @@ type RawConfig = {
   dashScopeKey?: unknown;
   deepseekKey?: unknown;
   deepSeekKey?: unknown;
+  cloudUserId?: unknown;
   tencentCos?: {
     bucketId?: unknown;
     bucketRegion?: unknown;
@@ -37,6 +39,8 @@ type RawConfig = {
     signedUrlTtl?: unknown;
     finalPassTimeout?: unknown;
     cosCleanupEnabled?: unknown;
+    sentryDsn?: unknown;
+    sentryEnvironment?: unknown;
   };
 };
 
@@ -44,11 +48,14 @@ type InternalRuntimeSettings = {
   signedUrlTtlSec: number;
   finalPassTimeoutSec: number;
   cosCleanupEnabled: boolean;
+  sentryDsn?: string;
+  sentryEnvironment?: string;
 };
 
 type ParsedDefaults = {
   dashscopeKey?: string;
   deepseekKey?: string;
+  cloudUserId?: string;
   tencentCos?: CosSettings;
   vocabularyTerms?: string[];
   vocabularyRawText?: string;
@@ -58,6 +65,7 @@ type ParsedDefaults = {
 type HiddenSettingsSections = {
   dashscope: boolean;
   deepseek: boolean;
+  cloudUserId: boolean;
   tencentCos: boolean;
   vocabulary: boolean;
 };
@@ -90,6 +98,12 @@ function parseDeepSeekKey(config: RawConfig): string | undefined {
   return key;
 }
 
+function parseCloudUserId(config: RawConfig): string | undefined {
+  const value = asTrimmedString(config.cloudUserId);
+  if (!value || !looksLikeCloudUserId(value)) return undefined;
+  return value;
+}
+
 function parseTencentCos(config: RawConfig): CosSettings | undefined {
   const normalized = normalizeCosSettings({
     cosBucket: asTrimmedString(config.tencentCos?.bucketId),
@@ -119,6 +133,9 @@ function parseVocabulary(config: RawConfig): { terms: string[]; rawText: string 
 }
 
 function parseInternal(config: RawConfig): InternalRuntimeSettings {
+  const sentryDsn = asTrimmedString(config.internal?.sentryDsn);
+  const sentryEnvironment = asTrimmedString(config.internal?.sentryEnvironment);
+
   return {
     signedUrlTtlSec: toPositiveInt(config.internal?.signedUrlTtl, DEFAULT_INTERNAL.signedUrlTtlSec, 60),
     finalPassTimeoutSec: toPositiveInt(
@@ -130,6 +147,8 @@ function parseInternal(config: RawConfig): InternalRuntimeSettings {
       typeof config.internal?.cosCleanupEnabled === 'boolean'
         ? config.internal.cosCleanupEnabled
         : DEFAULT_INTERNAL.cosCleanupEnabled,
+    sentryDsn: sentryDsn || undefined,
+    sentryEnvironment: sentryEnvironment || undefined,
   };
 }
 
@@ -140,6 +159,7 @@ function parseDefaults(input: unknown): ParsedDefaults {
   return {
     dashscopeKey: parseDashScopeKey(config),
     deepseekKey: parseDeepSeekKey(config),
+    cloudUserId: parseCloudUserId(config),
     tencentCos: parseTencentCos(config),
     vocabularyTerms: vocabulary?.terms,
     vocabularyRawText: vocabulary?.rawText,
@@ -182,6 +202,7 @@ export async function getHiddenSettingsSections(): Promise<HiddenSettingsSection
   return {
     dashscope: !!defaults.dashscopeKey,
     deepseek: !!defaults.deepseekKey,
+    cloudUserId: !!defaults.cloudUserId,
     tencentCos: !!defaults.tencentCos,
     vocabulary: !!defaults.vocabularyTerms?.length,
   };
@@ -189,12 +210,44 @@ export async function getHiddenSettingsSections(): Promise<HiddenSettingsSection
 
 export async function shouldHideSettingsTab(): Promise<boolean> {
   const sections = await getHiddenSettingsSections();
-  return sections.dashscope && sections.deepseek && sections.tencentCos && sections.vocabulary;
+  return (
+    sections.dashscope &&
+    sections.deepseek &&
+    sections.cloudUserId &&
+    sections.tencentCos &&
+    sections.vocabulary
+  );
+}
+
+export async function loadEffectiveCloudUserId(): Promise<string> {
+  const defaults = await loadRuntimeConfig();
+  if (defaults.cloudUserId) return defaults.cloudUserId;
+  return loadCloudUserId();
 }
 
 export async function getInternalRuntimeSettings(): Promise<InternalRuntimeSettings> {
   const defaults = await loadRuntimeConfig();
   return defaults.internal;
+}
+
+export async function loadDiagnosticsRuntimeConfig(): Promise<{
+  dsn: string | null;
+  environment: string | null;
+}> {
+  const defaults = await loadRuntimeConfig();
+  const envDsn =
+    typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_SENTRY_DSN
+      ? process.env.EXPO_PUBLIC_SENTRY_DSN.trim()
+      : '';
+  const envName =
+    typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_SENTRY_ENVIRONMENT
+      ? process.env.EXPO_PUBLIC_SENTRY_ENVIRONMENT.trim()
+      : '';
+
+  return {
+    dsn: defaults.internal.sentryDsn || envDsn || null,
+    environment: defaults.internal.sentryEnvironment || envName || null,
+  };
 }
 
 export async function loadEffectiveDashScopeApiKey(): Promise<string | null> {
