@@ -21,7 +21,7 @@ Evolve V1 into a resilient daily-use prototype by ensuring recording continuity,
   - upload starts only after explicit "continue" finalize decision,
   - discard deletes local draft artifacts and does not create remote records.
 - Cloud-backed history and artifacts:
-  - store audio, transcript markdown, and session metadata remotely,
+  - store audio, transcript markdown, and finalized History metadata remotely,
   - sync history list across devices for same `userId`.
 - In-session "What do you think" flow:
   - available during active recording,

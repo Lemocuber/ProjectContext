@@ -100,6 +100,18 @@ export function buildMarkdownFileName(startedAt: string, title: string): string 
   return `${y}${m}${d}-${sanitizeFileNameSegment(title)}.md`;
 }
 
+export function buildTranscriptPreview(text: string, maxLength = 120): string {
+  const normalized = text.replace(/\r\n?/g, '\n').trim();
+  if (!normalized) return '';
+
+  const body = normalized.includes('\n---\n')
+    ? normalized.slice(normalized.indexOf('\n---\n') + '\n---\n'.length)
+    : normalized;
+  const preview = body.replace(/\s+/g, ' ').trim();
+  if (!preview) return '';
+  return preview.length > maxLength ? `${preview.slice(0, maxLength)}...` : preview;
+}
+
 export function saveTranscriptMarkdown(sessionId: string, markdown: string): string {
   const directory = new Directory(Paths.document, TRANSCRIPTS_DIR_NAME);
   if (!directory.exists) {

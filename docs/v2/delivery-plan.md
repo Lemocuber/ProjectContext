@@ -3,13 +3,15 @@
 Date: 2026-03-11
 
 ## Milestone 1: Keepalive Recording Foundation
+- Status: completed and validated on-device on 2026-03-12.
 - Extract recording lifecycle from `RecordScreen` to app-level orchestrator.
 - Keep recording state alive across tab switches.
 - Add Android foreground service + ongoing notification for active recording.
 - Ensure restore/reattach behavior when app returns to foreground.
 
 ## Milestone 2: Cloud Session Model and Sync
-- Define remote object layout (`index.json`, `session.json`, `audio.wav`, `transcript.md`).
+- Status: current.
+- Define remote object layout (`index.json`, `audio.wav`, `transcript.md`).
 - Add cloud push pipeline on finalize and metadata changes.
 - Add cloud pull pipeline for History tab and startup hydration.
 - Implement local cache + sync status states (`pending/synced/failed`).

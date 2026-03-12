@@ -64,9 +64,9 @@ Complete the architectural prerequisite for V2 keepalive by moving recording own
 - `RecordScreen` now renders provider state instead of owning session lifecycle.
 - Typecheck passed after the refactor.
 - 2026-03-11: Android keepalive service/plugin integration added for foreground notification, wake lock, and notification stop action event wiring.
-- Native Android compile is not yet verified in this environment because the local machine does not have a Java runtime available to run Gradle.
-- On-device validation for screen lock and app background continuity remains pending.
+- 2026-03-12: on-device validation completed for screen lock, app backgrounding, and tab-switch continuity.
+- 2026-03-12: milestone accepted as complete; keepalive notification behavior verified on device.
 
 ## Follow-Up After This Slice
-- Run Android compile/build validation on a machine with Java/Android toolchain available.
-- Re-test screen lock and app background continuity on device.
+- Milestone 1 is closed as of 2026-03-12.
+- Move to Milestone 2 cloud session model and sync implementation.

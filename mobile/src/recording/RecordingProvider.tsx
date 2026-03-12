@@ -16,7 +16,6 @@ import {
   loadEffectiveVocabularySettings,
 } from '../config/defaultSettingsConfig';
 import {
-  FinalPassError,
   runDashScopeRecordedFinalPass,
   type FinalPassSpeakerMode,
 } from '../services/asr/dashscopeRecordedRecognition';
@@ -33,6 +32,7 @@ import { generateSessionTitle } from '../services/title/deepseekTitleService';
 import {
   buildMarkdownFileName,
   buildTranscriptMarkdown,
+  buildTranscriptPreview,
   saveTranscriptMarkdown,
 } from '../services/transcript/transcriptMarkdown';
 import {
@@ -42,7 +42,7 @@ import {
 } from '../services/recording/recordingKeepalive';
 import { hasCompleteCosSettings } from '../storage/cosSettingsStore';
 import { appendSessionHistory, updateSessionHistoryItem } from '../storage/sessionHistoryStore';
-import type { FinalPassFailureReason, FinalizedSentence, SessionHistoryItem } from '../types/session';
+import type { FinalizedSentence, SessionHistoryItem } from '../types/session';
 
 export type RecordingOrchestratorStatus = 'idle' | 'recording' | 'review' | 'finalizing' | 'failed';
 
@@ -79,15 +79,6 @@ const RecordingContext = createContext<RecordingContextValue | null>(null);
 function buildSessionId(): string {
   const seed = `${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`;
   return seed.slice(0, 24);
-}
-
-function inferFinalPassFailureReason(error: unknown): FinalPassFailureReason {
-  if (error instanceof FinalPassError) return error.reason;
-  if (!(error instanceof Error)) return 'unknown';
-  const lower = error.message.toLowerCase();
-  if (lower.includes('expire') || lower.includes('403') || lower.includes('url')) return 'url_expired';
-  if (lower.includes('upload')) return 'upload_failed';
-  return 'unknown';
 }
 
 export function RecordingProvider({ children, onHistoryUpdated }: RecordingProviderProps) {
@@ -173,21 +164,21 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
   const persistFailedSession = async (params: { audioFileUri?: string | null; message: string }) => {
     if (!startAtRef.current || !sessionIdRef.current) return;
     const startedAt = startAtRef.current;
+    const endedAt = new Date().toISOString();
+    const transcript = transcriptRef.current.trim();
+    const transcriptMarkdownUri = transcript ? saveTranscriptMarkdown(sessionIdRef.current, transcript) : undefined;
     await persistSession({
       id: sessionIdRef.current,
       startedAt,
-      endedAt: new Date().toISOString(),
+      endedAt,
+      updatedAt: endedAt,
       status: 'failed',
-      transcript: transcriptRef.current,
-      realtimeTranscriptRaw: transcriptRef.current,
+      title: buildFallbackTitle(startedAt),
+      previewText: buildTranscriptPreview(transcript) || params.message,
       errorText: params.message,
+      transcriptMarkdownUri,
       audioFileUri: params.audioFileUri ?? undefined,
-      fallbackTitle: buildFallbackTitle(startedAt),
-      highlightTapsMs: [...highlightTapsMsRef.current],
-      finalizedSentences: [],
-      appliedVocabularyId: appliedVocabularyIdRef.current,
-      appliedVocabularyTerms: [...appliedVocabularyTermsRef.current],
-      titleStatus: 'failed',
+      cloudSyncStatus: 'idle',
     });
   };
 
@@ -208,33 +199,21 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
     const runtimeSettings = await getInternalRuntimeSettings();
     const canRunFinalPass = !!event.audioFileUri && hasCompleteCosSettings(cosSettings);
 
-    let finalPassStatus: 'pending' | 'completed' | 'failed' = canRunFinalPass ? 'pending' : 'failed';
-    let finalPassFailureReason: FinalPassFailureReason | undefined;
-    if (!canRunFinalPass) finalPassFailureReason = !event.audioFileUri ? 'upload_failed' : 'unknown';
-    let finalPassTaskId: string | undefined;
     let sourceAudioRemoteUrl: string | undefined;
     let sourceAudioObjectKey: string | undefined;
     let finalizedSentences: FinalizedSentence[] = [];
     let bestTranscriptText = realtimeTranscriptRaw;
-    let generatedTitle: string | undefined;
-    let titleStatus: 'pending' | 'completed' | 'failed' = hasDeepSeekKey ? 'pending' : 'failed';
 
     await persistSession({
       id: sessionIdRef.current,
       startedAt,
       endedAt,
+      updatedAt: endedAt,
       status: 'completed',
-      transcript: realtimeTranscriptRaw,
-      realtimeTranscriptRaw,
-      fallbackTitle,
-      highlightTapsMs: [...highlightTapsMsRef.current],
-      finalizedSentences: [],
-      finalPassStatus,
-      finalPassFailureReason,
+      title: fallbackTitle,
+      previewText: buildTranscriptPreview(realtimeTranscriptRaw) || 'No transcript captured.',
       audioFileUri: event.audioFileUri ?? undefined,
-      appliedVocabularyId: appliedVocabularyIdRef.current,
-      appliedVocabularyTerms: [...appliedVocabularyTermsRef.current],
-      titleStatus,
+      cloudSyncStatus: 'idle',
     });
 
     if (canRunFinalPass && event.audioFileUri) {
@@ -249,12 +228,6 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
         });
         sourceAudioRemoteUrl = stagedAudio.sourceAudioRemoteUrl;
         sourceAudioObjectKey = stagedAudio.objectKey;
-        await updateSessionHistoryItem(sessionIdRef.current, (item) => ({
-          ...item,
-          sourceAudioRemoteUrl,
-          sourceAudioObjectKey,
-        }));
-        onHistoryUpdated?.();
 
         const finalPassResult = await runDashScopeRecordedFinalPass({
           apiKey: (await loadEffectiveDashScopeApiKey()) || '',
@@ -265,7 +238,6 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
           onStatus: setInfoText,
         });
 
-        finalPassTaskId = finalPassResult.taskId;
         finalizedSentences = anchorHighlightTaps(
           finalPassResult.finalizedSentences,
           highlightTapsMsRef.current,
@@ -274,11 +246,7 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
           finalPassResult.transcriptText.trim() ||
           finalizedSentences.map((sentence) => sentence.text).join(' ').trim() ||
           realtimeTranscriptRaw;
-        finalPassStatus = 'completed';
-        finalPassFailureReason = undefined;
       } catch (error) {
-        finalPassStatus = 'failed';
-        finalPassFailureReason = inferFinalPassFailureReason(error);
         finalizedSentences = [];
         bestTranscriptText = realtimeTranscriptRaw;
       } finally {
@@ -291,31 +259,30 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
       }
     }
 
+    let finalTitle = fallbackTitle;
     if (hasDeepSeekKey && bestTranscriptText.trim()) {
       setInfoText('Generating session title...');
       try {
-        generatedTitle = await generateSessionTitle({
+        finalTitle =
+          (await generateSessionTitle({
           apiKey: deepSeekApiKey,
           transcript: bestTranscriptText,
           highlights: collectHighlightTexts(finalizedSentences),
-        });
-        titleStatus = 'completed';
+        })) || fallbackTitle;
       } catch {
-        titleStatus = 'failed';
+        finalTitle = fallbackTitle;
       }
-    } else if (hasDeepSeekKey) {
-      titleStatus = 'failed';
     }
 
-    const finalTitle = generatedTitle || fallbackTitle;
     const markdown = buildTranscriptMarkdown({
       title: finalTitle,
       startedAt,
       endedAt,
-      sentences: finalPassStatus === 'completed' ? finalizedSentences : undefined,
-      fallbackTranscript: finalPassStatus === 'completed' ? undefined : realtimeTranscriptRaw,
+      sentences: finalizedSentences.length ? finalizedSentences : undefined,
+      fallbackTranscript: finalizedSentences.length ? undefined : realtimeTranscriptRaw,
     });
     const transcriptMarkdownUri = saveTranscriptMarkdown(sessionIdRef.current, markdown);
+    const previewText = buildTranscriptPreview(markdown) || 'No transcript captured.';
 
     let markdownAutoExportStatus: 'completed' | 'failed' = 'failed';
     let markdownLastPath: string | undefined;
@@ -334,15 +301,9 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
 
     await updateSessionHistoryItem(sessionIdRef.current, (item) => ({
       ...item,
-      transcript: markdown,
-      generatedTitle,
-      titleStatus,
-      finalizedSentences: finalPassStatus === 'completed' ? finalizedSentences : [],
-      finalPassStatus,
-      finalPassTaskId,
-      finalPassFailureReason,
-      sourceAudioRemoteUrl,
-      sourceAudioObjectKey,
+      updatedAt: new Date().toISOString(),
+      title: finalTitle,
+      previewText,
       transcriptMarkdownUri,
       exportMetadata: {
         ...item.exportMetadata,

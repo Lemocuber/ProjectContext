@@ -52,7 +52,6 @@ Date: 2026-03-11
 
 ## Object Layout
 - `users/{userId}/index.json`
-- `users/{userId}/sessions/{sessionId}/session.json`
 - `users/{userId}/sessions/{sessionId}/audio.wav`
 - `users/{userId}/sessions/{sessionId}/transcript.md`
 
@@ -64,14 +63,20 @@ Date: 2026-03-11
   - `status`,
   - `title`,
   - `updatedAt`.
-- Keep bounded size for prototype responsiveness (for example latest 200 entries).
+- Optional fields may include `previewText` and `errorText` if History list rendering should avoid opening transcript artifacts.
+- Keep newest-first ordering with no artificial count limit in V2.
 
-## `session.json` Purpose
-- Full metadata for session detail and reconciliation:
-  - V1 metadata fields (final-pass status/failure reason, vocabulary, title state, export metadata),
-  - remote artifact keys/URIs,
-  - sync timestamps,
-  - optional in-session AI suggestion records.
+## Transcript Persistence Rule
+- `transcript.md` is the canonical persisted transcript artifact.
+- Raw transcript text is finalize-time working data only.
+- If final-pass succeeds, markdown is built from finalized sentences and highlight markers.
+- If final-pass is unavailable or fails, markdown is built from the fallback raw transcript.
+- After markdown generation completes, raw transcript and other finalize intermediates are discarded.
+
+## Artifact Addressing Rule
+- Remote artifact paths are deterministic from `sessionId`.
+- Because artifact locations are derivable, V2 does not require `session.json`.
+- Local storage follows the same strict-alignment rule: metadata in the history store, transcript body in the markdown artifact.
 
 ## Sync Model
 - Local-first cache remains available when offline.
@@ -80,9 +85,8 @@ Date: 2026-03-11
   - History tab open/refresh,
   - explicit manual refresh.
 - Push triggers:
-  - successful finalize state updates,
-  - title/final-pass state changes,
-  - any mutation to session metadata after finalize.
+  - successful finalize completion,
+  - later mutations to finalized user-visible History fields only.
 - Conflict rule:
   - last-write-wins by `updatedAt`.
 - Failed sync writes:
@@ -92,7 +96,7 @@ Date: 2026-03-11
 ## History Tab Data Source Rule
 - Cloud index is primary when reachable.
 - Local cache is fallback when network unavailable.
-- Detail view loads from local cache first, then hydrates with remote `session.json` if newer.
+- Detail view loads from local artifact cache first, then hydrates transcript/audio artifacts from the deterministic remote paths when needed.
 
 ## In-Session "What Do You Think"
 
@@ -110,17 +114,17 @@ Date: 2026-03-11
 ## Output Contract
 - Concise actionable response (prototype target: 1-3 short bullets).
 - Displayed inline during recording without interrupting capture.
-- Suggestion records may be persisted into session metadata for later review (optional but recommended for traceability).
+- Suggestion records remain UI-only in V2 and are not part of History storage.
 
 ## Data Model Additions
 - `SessionHistoryItem` additions (proposed):
   - `cloudSyncStatus?: "idle" | "pending" | "synced" | "failed"`,
   - `cloudUpdatedAt?: string`,
-  - `remoteSessionKey?: string`,
   - `remoteAudioKey?: string`,
-  - `remoteMarkdownKey?: string`,
-  - `liveSuggestions?: Array<{ id: string; createdAt: string; sourceWindowMs: number; text: string }>`
-- `SessionHistoryStore` and cloud index mapping must remain backward-tolerant for existing V1 entries.
+  - `remoteMarkdownKey?: string`
+- Persisted history should contain only finalized History metadata plus local artifact references required by the app.
+- Persisted history should not duplicate the full transcript body inline.
+- `SessionHistoryStore` validates only the V2 strict-alignment shape; older persisted shapes are not supported.
 
 ## Reliability Rules
 - Keepalive failure must surface explicit status and not silently lose transcript.
@@ -128,6 +132,7 @@ Date: 2026-03-11
 - Finalize success is independent from immediate history sync success:
   - session remains completed locally,
   - cloud sync can retry later.
+- Local and remote History models should stay intentionally aligned so sync does not need to translate pipeline-only state.
 
 ## Prototype Security Posture (Explicit)
 - Internal/personal tool posture allows simplified user identity setup.

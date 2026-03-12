@@ -44,6 +44,8 @@ const EMPTY_PLAYER_STATE: PlayerState = {
 export function HistoryScreen({ refreshToken }: HistoryScreenProps) {
   const [history, setHistory] = useState<SessionHistoryItem[]>([]);
   const [selectedItem, setSelectedItem] = useState<SessionHistoryItem | null>(null);
+  const [selectedTranscript, setSelectedTranscript] = useState('');
+  const [transcriptError, setTranscriptError] = useState('');
   const [playerState, setPlayerState] = useState<PlayerState>(EMPTY_PLAYER_STATE);
   const [audioError, setAudioError] = useState('');
   const [exportError, setExportError] = useState('');
@@ -138,7 +140,9 @@ export function HistoryScreen({ refreshToken }: HistoryScreenProps) {
   const openDetails = useCallback(
     (item: SessionHistoryItem) => {
       setSelectedItem(item);
+      setSelectedTranscript('');
       setAudioError('');
+      setTranscriptError('');
       if (item.audioFileUri) {
         void loadSoundForItem(item);
       } else {
@@ -151,7 +155,9 @@ export function HistoryScreen({ refreshToken }: HistoryScreenProps) {
   const closeDetails = useCallback(async () => {
     loadSeqRef.current += 1;
     setSelectedItem(null);
+    setSelectedTranscript('');
     setAudioError('');
+    setTranscriptError('');
     setExportError('');
     await unloadSound();
   }, [unloadSound]);
@@ -309,6 +315,35 @@ export function HistoryScreen({ refreshToken }: HistoryScreenProps) {
     void refreshHistory();
   }, [refreshHistory, refreshToken]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const uri = selectedItem?.transcriptMarkdownUri;
+
+    if (!uri) {
+      setSelectedTranscript('');
+      setTranscriptError('');
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setTranscriptError('');
+    void loadTranscriptMarkdown(uri)
+      .then((content) => {
+        if (cancelled) return;
+        setSelectedTranscript(content);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setSelectedTranscript('');
+        setTranscriptError(error instanceof Error ? error.message : 'Failed to load transcript.');
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedItem?.id, selectedItem?.transcriptMarkdownUri]);
+
   useEffect(
     () => () => {
       loadSeqRef.current += 1;
@@ -373,13 +408,6 @@ export function HistoryScreen({ refreshToken }: HistoryScreenProps) {
                   {formatSessionRange(selectedItem.startedAt, selectedItem.endedAt)}
                 </Text>
                 <Text style={styles.detailMeta}>Status: {selectedItem.status}</Text>
-                <Text style={styles.detailMeta}>Final pass: {selectedItem.finalPassStatus || 'n/a'}</Text>
-                {selectedItem.finalPassFailureReason ? (
-                  <Text style={styles.detailMeta}>
-                    Final-pass failure: {selectedItem.finalPassFailureReason}
-                  </Text>
-                ) : null}
-                <Text style={styles.detailMeta}>Title status: {selectedItem.titleStatus || 'n/a'}</Text>
                 {selectedItem.exportMetadata?.markdownAutoExportStatus ? (
                   <Text style={styles.detailMeta}>
                     Auto-export: {selectedItem.exportMetadata.markdownAutoExportStatus}
@@ -430,9 +458,8 @@ export function HistoryScreen({ refreshToken }: HistoryScreenProps) {
                 </View>
 
                 <Text style={styles.label}>Full Transcript</Text>
-                <Text style={styles.transcriptText}>
-                  {selectedItem.transcript || 'No transcript captured.'}
-                </Text>
+                <Text style={styles.transcriptText}>{selectedTranscript || 'No transcript captured.'}</Text>
+                {transcriptError ? <Text style={styles.errorText}>{transcriptError}</Text> : null}
 
                 <View style={styles.exportRow}>
                   <Pressable
@@ -496,7 +523,7 @@ function formatClock(value: number): string {
 }
 
 function previewText(item: SessionHistoryItem): string {
-  const text = item.transcript || item.errorText || 'No transcript captured.';
+  const text = item.previewText || item.errorText || 'No transcript captured.';
   return text.length > 120 ? `${text.slice(0, 120)}...` : text;
 }
 

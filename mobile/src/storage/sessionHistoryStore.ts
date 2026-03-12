@@ -1,37 +1,19 @@
 import * as SecureStore from 'expo-secure-store';
 import type {
+  CloudSyncStatus,
   ExportMetadata,
-  FinalPassFailureReason,
-  FinalPassStatus,
-  FinalizedSentence,
   SessionHistoryItem,
   SessionHistoryStatus,
-  TitleStatus,
 } from '../types/session';
 
 const SESSION_HISTORY_KEY = 'session_history_v2';
-const MAX_HISTORY_ITEMS = 20;
 
 function isSessionStatus(value: unknown): value is SessionHistoryStatus {
   return value === 'completed' || value === 'failed';
 }
 
-function isTitleStatus(value: unknown): value is TitleStatus {
-  return value === 'pending' || value === 'completed' || value === 'failed';
-}
-
-function isFinalPassStatus(value: unknown): value is FinalPassStatus {
-  return value === 'pending' || value === 'completed' || value === 'failed';
-}
-
-function isFinalPassFailureReason(value: unknown): value is FinalPassFailureReason {
-  return (
-    value === 'upload_failed' ||
-    value === 'url_expired' ||
-    value === 'recognition_failed' ||
-    value === 'timeout' ||
-    value === 'unknown'
-  );
+function isCloudSyncStatus(value: unknown): value is CloudSyncStatus {
+  return value === 'idle' || value === 'pending' || value === 'synced' || value === 'failed';
 }
 
 function isExportMetadata(value: unknown): value is ExportMetadata {
@@ -65,24 +47,6 @@ function isExportMetadata(value: unknown): value is ExportMetadata {
   return true;
 }
 
-function isFinalizedSentence(value: unknown): value is FinalizedSentence {
-  if (!value || typeof value !== 'object') return false;
-  const sentence = value as Record<string, unknown>;
-  if (typeof sentence.startMs !== 'number' || !Number.isFinite(sentence.startMs)) return false;
-  if (typeof sentence.endMs !== 'number' || !Number.isFinite(sentence.endMs)) return false;
-  if (typeof sentence.text !== 'string') return false;
-  if (
-    typeof sentence.speakerLabel !== 'undefined' &&
-    typeof sentence.speakerLabel !== 'string'
-  ) {
-    return false;
-  }
-  if (typeof sentence.isHighlight !== 'undefined' && typeof sentence.isHighlight !== 'boolean') {
-    return false;
-  }
-  return true;
-}
-
 function isSessionHistoryItem(value: unknown): value is SessionHistoryItem {
   if (!value || typeof value !== 'object') return false;
 
@@ -90,75 +54,45 @@ function isSessionHistoryItem(value: unknown): value is SessionHistoryItem {
   if (typeof item.id !== 'string') return false;
   if (typeof item.startedAt !== 'string') return false;
   if (typeof item.endedAt !== 'string') return false;
+  if (typeof item.updatedAt !== 'string') return false;
   if (!isSessionStatus(item.status)) return false;
-  if (typeof item.transcript !== 'string') return false;
-  if (
-    typeof item.realtimeTranscriptRaw !== 'undefined' &&
-    typeof item.realtimeTranscriptRaw !== 'string'
-  ) {
-    return false;
-  }
-  if (typeof item.fallbackTitle !== 'string') return false;
-  if (!Array.isArray(item.highlightTapsMs)) return false;
-  if (!item.highlightTapsMs.every((entry) => typeof entry === 'number' && Number.isFinite(entry))) {
-    return false;
-  }
-  if (
-    typeof item.finalizedSentences !== 'undefined' &&
-    (!Array.isArray(item.finalizedSentences) ||
-      !item.finalizedSentences.every((entry) => isFinalizedSentence(entry)))
-  ) {
-    return false;
-  }
-  if (
-    typeof item.appliedVocabularyId !== 'undefined' &&
-    typeof item.appliedVocabularyId !== 'string'
-  ) {
-    return false;
-  }
-  if (
-    typeof item.appliedVocabularyTerms !== 'undefined' &&
-    (!Array.isArray(item.appliedVocabularyTerms) ||
-      !item.appliedVocabularyTerms.every((entry) => typeof entry === 'string'))
-  ) {
-    return false;
-  }
-  if (typeof item.generatedTitle !== 'undefined' && typeof item.generatedTitle !== 'string') return false;
-  if (typeof item.titleStatus !== 'undefined' && !isTitleStatus(item.titleStatus)) return false;
-  if (typeof item.finalPassStatus !== 'undefined' && !isFinalPassStatus(item.finalPassStatus)) return false;
-  if (typeof item.finalPassTaskId !== 'undefined' && typeof item.finalPassTaskId !== 'string') return false;
-  if (
-    typeof item.finalPassFailureReason !== 'undefined' &&
-    !isFinalPassFailureReason(item.finalPassFailureReason)
-  ) {
-    return false;
-  }
-  if (
-    typeof item.sourceAudioRemoteUrl !== 'undefined' &&
-    typeof item.sourceAudioRemoteUrl !== 'string'
-  ) {
-    return false;
-  }
-  if (
-    typeof item.sourceAudioObjectKey !== 'undefined' &&
-    typeof item.sourceAudioObjectKey !== 'string'
-  ) {
-    return false;
-  }
+  if (typeof item.title !== 'string') return false;
+  if (typeof item.previewText !== 'string') return false;
   if (
     typeof item.transcriptMarkdownUri !== 'undefined' &&
     typeof item.transcriptMarkdownUri !== 'string'
   ) {
     return false;
   }
-  if (
-    typeof item.exportMetadata !== 'undefined' &&
-    !isExportMetadata(item.exportMetadata)
-  ) {
+  if (typeof item.exportMetadata !== 'undefined' && !isExportMetadata(item.exportMetadata)) {
     return false;
   }
   if (typeof item.errorText !== 'undefined' && typeof item.errorText !== 'string') return false;
   if (typeof item.audioFileUri !== 'undefined' && typeof item.audioFileUri !== 'string') return false;
+  if (
+    typeof item.cloudSyncStatus !== 'undefined' &&
+    !isCloudSyncStatus(item.cloudSyncStatus)
+  ) {
+    return false;
+  }
+  if (
+    typeof item.cloudUpdatedAt !== 'undefined' &&
+    typeof item.cloudUpdatedAt !== 'string'
+  ) {
+    return false;
+  }
+  if (
+    typeof item.remoteAudioKey !== 'undefined' &&
+    typeof item.remoteAudioKey !== 'string'
+  ) {
+    return false;
+  }
+  if (
+    typeof item.remoteMarkdownKey !== 'undefined' &&
+    typeof item.remoteMarkdownKey !== 'string'
+  ) {
+    return false;
+  }
   return true;
 }
 
@@ -173,12 +107,7 @@ export async function loadSessionHistory(): Promise<SessionHistoryItem[]> {
   try {
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter((entry): entry is SessionHistoryItem => isSessionHistoryItem(entry))
-      .map((entry) => ({
-        ...entry,
-        realtimeTranscriptRaw: entry.realtimeTranscriptRaw ?? entry.transcript,
-      }));
+    return parsed.filter((entry): entry is SessionHistoryItem => isSessionHistoryItem(entry));
   } catch {
     return [];
   }
@@ -186,7 +115,7 @@ export async function loadSessionHistory(): Promise<SessionHistoryItem[]> {
 
 export async function appendSessionHistory(item: SessionHistoryItem): Promise<SessionHistoryItem[]> {
   const current = await loadSessionHistory();
-  const next = [item, ...current.filter((entry) => entry.id !== item.id)].slice(0, MAX_HISTORY_ITEMS);
+  const next = [item, ...current.filter((entry) => entry.id !== item.id)];
   await saveSessionHistory(next);
   return next;
 }

@@ -4,6 +4,7 @@
 1. Finalize V2 specs for recording keepalive, cloud history/artifact sync, and in-session AI suggestions.
 2. Implement keepalive foundation first (service ownership + Android foreground notification).
 3. Implement cloud sync model second (index/session metadata/artifact upload + history pull).
+3. Implement cloud sync model second (index metadata + artifact upload + history pull).
 4. Implement in-session "What do you think" third (realtime transcript window + cooldown + UI integration).
 5. Run integrated manual validation on Android lock/background/tab-switch and cross-device history sync.
 
@@ -20,7 +21,6 @@
 ### Workstream B: Cloud Storage + History Sync
 - Add remote artifact layout:
   - `users/{userId}/index.json`,
-  - `users/{userId}/sessions/{sessionId}/session.json`,
   - `users/{userId}/sessions/{sessionId}/audio.wav`,
   - `users/{userId}/sessions/{sessionId}/transcript.md`.
 - Add pull-on-launch/history-refresh and push-on-finalize/state-update flows.

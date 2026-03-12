@@ -1,6 +1,6 @@
 # V2 Spec Pack
 
-Status: draft (scope aligned 2026-03-11).
+Status: in progress. Milestone 1 completed on 2026-03-12; Milestone 2 spec drafted.
 
 ## Scope Pillars
 - Recording keepalive across screen lock, app backgrounding, and in-app tab switches.
@@ -13,3 +13,4 @@ Status: draft (scope aligned 2026-03-11).
 - [Delivery Plan](./delivery-plan.md)
 - [Risks and Open Questions](./risks-and-open-questions.md)
 - [Milestone 1 Implementation Spec](./milestone-1-implementation-spec.md)
+- [Milestone 2 Implementation Spec](./milestone-2-implementation-spec.md)
