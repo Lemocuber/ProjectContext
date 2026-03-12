@@ -52,7 +52,7 @@ export async function generateLiveSuggestions(params: {
         {
           role: 'system',
           content:
-            'You are assisting during an ongoing conversation. Return 1 to 3 short actionable suggestions for what the user should say, ask, or do next. Keep the response concise, practical, and in the same dominant language as the transcript. Plain text only.',
+            'You are providing live AI insights during an ongoing conversation. Return 1 to 3 short bullet-style lines. Focus on what the speakers may be missing, overlooking, assuming without evidence, or failing to clarify, and when useful include a concrete follow-up question or next move. Keep each line concise, practical, and in the same dominant language as the transcript. Plain text only.',
         },
         {
           role: 'user',

@@ -45,12 +45,16 @@ Define and implement the in-session "What do you think" flow, while also fixing 
 
 ## Token Budgeting Model
 - Introduce a shared `estimateTokens(text)` helper behind a small adapter boundary.
-- Preferred implementation direction:
-  - use a lightweight local tokenizer aligned with the chosen chat model when practical in the React Native runtime.
-- Acceptable fallback if that proves impractical:
-  - a single conservative shared estimator with explicit safety headroom.
+- Implementation direction for V2:
+  - use a lightweight local weighted estimator rather than a bundled model tokenizer in the React Native runtime.
+- Estimation rule:
+  - CJK characters count as roughly `1`,
+  - ASCII letters count as roughly `0.25`,
+  - digits count as roughly `0.33`,
+  - punctuation/symbols count lightly,
+  - whitespace does not count.
 - Callers must reserve budget for prompt instructions and model output; the transcript truncation budget applies only to transcript-derived content.
-- Keep a safety margin so estimated transcript context stays below the intended request size even when the estimator is imperfect.
+- Use direct front/back slicing against that estimated budget rather than loading a large tokenizer table into the mobile runtime.
 
 ## Prompt Context Rules
 
@@ -110,12 +114,12 @@ Define and implement the in-session "What do you think" flow, while also fixing 
 - Cooldown and single in-flight rules prevent repeated live suggestion bursts during active recording.
 
 ## Implementation Status
-- 2026-03-13: added `o200k_base` tokenizer-backed transcript truncation helper for title and live suggestion prompt shaping.
+- 2026-03-13: replaced the failed bundled-tokenizer approach with a lightweight weighted estimator for transcript truncation on mobile.
 - 2026-03-13: title generation switched from full-transcript input to bounded beginning-plus-ending context.
 - 2026-03-13: added live DeepSeek suggestion requests during recording with cooldown and single in-flight guards.
 - 2026-03-13: replaced the recording-time highlight counter UI with a timer while leaving highlight behavior otherwise unchanged.
 - 2026-03-13: mobile typecheck passed after the Milestone 3 implementation pass.
 
 ## Notes for Follow-Up
-- If implementation reveals that a model-aligned tokenizer is too heavy or incompatible for React Native, keep the adapter boundary and ship a conservative estimator first rather than duplicating prompt-shaping logic.
+- If a future version needs exact model-token parity, move tokenization off the Hermes mobile runtime path rather than bundling a large tokenizer table directly into the app.
 - If suggestion quality is noisy with partial transcript text, prefer trimming unstable trailing partials before truncation rather than widening the prompt budget.

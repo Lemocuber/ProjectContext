@@ -204,7 +204,7 @@ export function RecordScreen() {
             ]}
           >
             <Text style={styles.suggestionButtonText}>
-              {isRequestingSuggestion ? 'Thinking...' : 'What do you think'}
+              {isRequestingSuggestion ? 'Thinking...' : 'AI Insights'}
             </Text>
           </Pressable>
         </View>
@@ -237,7 +237,7 @@ export function RecordScreen() {
       {infoText ? <Text style={styles.infoText}>{infoText}</Text> : null}
       {suggestionStatusText || suggestionItems.length ? (
         <View style={styles.suggestionPanel}>
-          <Text style={styles.suggestionTitle}>What do you think</Text>
+          <Text style={styles.suggestionTitle}>AI Insights</Text>
           {suggestionStatusText ? <Text style={styles.suggestionStatusText}>{suggestionStatusText}</Text> : null}
           {suggestionItems.map((item, index) => (
             <Text key={`${index}-${item}`} style={styles.suggestionItemText}>
