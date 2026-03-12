@@ -16,6 +16,10 @@ import {
 import type { SessionHistoryItem, SessionHistoryStatus } from '../../types/session';
 import { saveSessionAudioBase64 } from '../audio/sessionAudio';
 import { buildSignedCosUrl } from '../cos/cosSigning';
+import {
+  addDiagnosticsBreadcrumb,
+  captureDiagnosticsException,
+} from '../diagnostics/diagnostics';
 import { saveTranscriptMarkdown } from '../transcript/transcriptMarkdown';
 
 type CloudHistoryIndexEntry = {
@@ -294,7 +298,17 @@ async function pushPendingItems(
 
     try {
       next.push(await uploadItem(config, item));
-    } catch {
+    } catch (error) {
+      captureDiagnosticsException(error, {
+        extras: {
+          hasAudioFile: !!item.audioFileUri,
+          hasTranscriptFile: !!item.transcriptMarkdownUri,
+          status: item.status,
+        },
+        feature: 'cloud_sync',
+        level: 'warning',
+        stage: 'upload_item',
+      });
       next.push({
         ...item,
         cloudSyncStatus: 'failed',
@@ -368,6 +382,10 @@ function mergeRemoteIndex(config: CloudConfig, localItems: SessionHistoryItem[],
 
 export async function syncHistoryWithCloud(): Promise<SessionHistoryItem[]> {
   return enqueue(async () => {
+    addDiagnosticsBreadcrumb({
+      category: 'cloud.sync',
+      message: 'History sync started.',
+    });
     const userId = await loadEffectiveCloudUserId();
     const config = await loadCloudConfig(userId);
     const localItems = await loadSessionHistory(userId);
@@ -380,8 +398,18 @@ export async function syncHistoryWithCloud(): Promise<SessionHistoryItem[]> {
       const remoteEntries = await loadRemoteIndex(config);
       const merged = mergeRemoteIndex(config, pushed, remoteEntries);
       await replaceSessionHistory(merged, userId);
+      addDiagnosticsBreadcrumb({
+        category: 'cloud.sync',
+        data: { itemCount: merged.length },
+        message: 'History sync completed.',
+      });
       return merged;
-    } catch {
+    } catch (error) {
+      captureDiagnosticsException(error, {
+        feature: 'cloud_sync',
+        level: 'warning',
+        stage: 'load_remote_index',
+      });
       return pushed;
     }
   });
@@ -389,6 +417,10 @@ export async function syncHistoryWithCloud(): Promise<SessionHistoryItem[]> {
 
 export async function uploadSessionToCloud(sessionId: string, userId?: string): Promise<SessionHistoryItem | null> {
   return enqueue(async () => {
+    addDiagnosticsBreadcrumb({
+      category: 'cloud.sync',
+      message: 'Single-session upload started.',
+    });
     const resolvedUserId = userId || (await loadEffectiveCloudUserId());
     const config = await loadCloudConfig(resolvedUserId);
     const items = await loadSessionHistory(resolvedUserId);
@@ -396,6 +428,10 @@ export async function uploadSessionToCloud(sessionId: string, userId?: string): 
 
     const next = await pushPendingItems(config, items, sessionId);
     await replaceSessionHistory(next, resolvedUserId);
+    addDiagnosticsBreadcrumb({
+      category: 'cloud.sync',
+      message: 'Single-session upload completed.',
+    });
     return next.find((item) => item.id === sessionId) ?? null;
   });
 }

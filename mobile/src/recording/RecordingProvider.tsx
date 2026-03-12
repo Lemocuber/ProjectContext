@@ -18,6 +18,11 @@ import {
 } from '../config/defaultSettingsConfig';
 import { generateLiveSuggestions } from '../services/ai/deepseekLiveSuggestionService';
 import {
+  addDiagnosticsBreadcrumb,
+  captureDiagnosticsException,
+  captureDiagnosticsMessage,
+} from '../services/diagnostics/diagnostics';
+import {
   runDashScopeRecordedFinalPass,
   type FinalPassSpeakerMode,
 } from '../services/asr/dashscopeRecordedRecognition';
@@ -221,6 +226,15 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
   const finalizeCompletedSession = async (event: Extract<AsrEvent, { type: 'final' }>) => {
     if (!startAtRef.current || !sessionIdRef.current || !ownerUserIdRef.current) return;
 
+    addDiagnosticsBreadcrumb({
+      category: 'recording.finalize',
+      data: {
+        hasAudioFile: !!event.audioFileUri,
+        speakerMode: finalPassSpeakerModeRef.current,
+      },
+      message: 'Session finalization started.',
+    });
+
     const startedAt = startAtRef.current;
     const ownerUserId = ownerUserIdRef.current;
     const endedAt = new Date().toISOString();
@@ -282,6 +296,15 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
           finalizedSentences.map((sentence) => sentence.text).join(' ').trim() ||
           realtimeTranscriptRaw;
       } catch (error) {
+        captureDiagnosticsException(error, {
+          extras: {
+            hasAudioFile: !!event.audioFileUri,
+            speakerMode: finalPassSpeakerModeRef.current,
+          },
+          feature: 'final_pass',
+          level: 'warning',
+          stage: 'recorded_recognition',
+        });
         finalizedSentences = [];
         bestTranscriptText = realtimeTranscriptRaw;
       } finally {
@@ -303,7 +326,12 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
           apiKey: deepSeekApiKey,
           transcript: bestTranscriptText,
         })) || fallbackTitle;
-      } catch {
+      } catch (error) {
+        captureDiagnosticsException(error, {
+          feature: 'title_generation',
+          level: 'warning',
+          stage: 'finalize',
+        });
         finalTitle = fallbackTitle;
       }
     }
@@ -329,6 +357,11 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
       markdownAutoExportStatus = 'completed';
       toast('Markdown exported to Downloads.');
     } catch (error) {
+      captureDiagnosticsException(error, {
+        feature: 'export',
+        level: 'warning',
+        stage: 'auto_markdown',
+      });
       const message = error instanceof Error ? error.message : 'Markdown auto-export failed.';
       toast(message);
     }
@@ -354,6 +387,11 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
       await uploadSessionToCloud(sessionIdRef.current, ownerUserId);
       onHistoryUpdated?.();
     }
+
+    addDiagnosticsBreadcrumb({
+      category: 'recording.finalize',
+      message: 'Session finalization completed.',
+    });
   };
 
   const start = async () => {
@@ -398,6 +436,10 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
     }
 
     try {
+      addDiagnosticsBreadcrumb({
+        category: 'recording.lifecycle',
+        message: 'Recording start requested.',
+      });
       await startRecordingKeepaliveNotification();
       sessionRef.current = await dashscopeRealtimeSessionService.start({
         apiKey,
@@ -422,6 +464,11 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
             setIsStopping(false);
             setStatus('review');
             setInfoText('Review recording: discard or continue.');
+            addDiagnosticsBreadcrumb({
+              category: 'recording.lifecycle',
+              data: { hasAudioFile: !!event.audioFileUri },
+              message: 'Recording stopped and entered review.',
+            });
             return;
           }
           if (event.type === 'status') {
@@ -437,12 +484,22 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
           setStatus('failed');
           setInfoText('');
           setIsStopping(false);
+          captureDiagnosticsMessage(event.message, {
+            extras: { hasAudioFile: !!event.audioFileUri },
+            feature: 'recording',
+            level: 'error',
+            stage: 'session_event',
+          });
           resetSpeakerMode();
           void persistFailedSession({
             message: event.message,
             audioFileUri: event.audioFileUri,
           });
         },
+      });
+      addDiagnosticsBreadcrumb({
+        category: 'recording.lifecycle',
+        message: 'Recording started successfully.',
       });
     } catch (error) {
       await stopRecordingKeepaliveNotification();
@@ -451,6 +508,11 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
       setIsStopping(false);
       const message = error instanceof Error ? error.message : 'Failed to start audio session.';
       setErrorText(message);
+      captureDiagnosticsException(error, {
+        feature: 'recording',
+        level: 'error',
+        stage: 'start',
+      });
       resetSpeakerMode();
       await persistFailedSession({ message });
     }
@@ -460,6 +522,10 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
     if (!sessionRef.current || status !== 'recording' || isStopping) return;
     setIsStopping(true);
     try {
+      addDiagnosticsBreadcrumb({
+        category: 'recording.lifecycle',
+        message: 'Recording stop requested.',
+      });
       await sessionRef.current.stop();
     } catch (error) {
       await stopRecordingKeepaliveNotification();
@@ -468,6 +534,11 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
       setIsStopping(false);
       const message = error instanceof Error ? error.message : 'Failed to stop audio session.';
       setErrorText(message);
+      captureDiagnosticsException(error, {
+        feature: 'recording',
+        level: 'error',
+        stage: 'stop',
+      });
       resetSpeakerMode();
       await persistFailedSession({ message });
     } finally {
@@ -506,6 +577,10 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
     setIsRequestingSuggestion(true);
     setSuggestionStatusText('Thinking...');
     try {
+      addDiagnosticsBreadcrumb({
+        category: 'live_suggestion',
+        message: 'Live suggestion requested.',
+      });
       const suggestions = await generateLiveSuggestions({
         apiKey: deepSeekApiKey,
         transcript,
@@ -514,9 +589,19 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
       lastSuggestionAtRef.current = Date.now();
       setSuggestionItems(suggestions);
       setSuggestionStatusText('');
+      addDiagnosticsBreadcrumb({
+        category: 'live_suggestion',
+        data: { count: suggestions.length },
+        message: 'Live suggestion completed.',
+      });
     } catch (error) {
       if (suggestionRequestIdRef.current !== requestId) return;
       const message = error instanceof Error ? error.message : 'Failed to generate suggestions.';
+      captureDiagnosticsException(error, {
+        feature: 'live_suggestion',
+        level: 'warning',
+        stage: 'request',
+      });
       setSuggestionStatusText(message);
     } finally {
       if (suggestionRequestIdRef.current === requestId) {
@@ -539,6 +624,11 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
       resetDraftState('');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to finalize session.';
+      captureDiagnosticsException(error, {
+        feature: 'recording',
+        level: 'error',
+        stage: 'finalize',
+      });
       setErrorText(message);
       setStatus('failed');
       setInfoText('');
@@ -569,6 +659,10 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
       }
     }
 
+    addDiagnosticsBreadcrumb({
+      category: 'recording.lifecycle',
+      message: 'Recording discarded from review.',
+    });
     resetDraftState('Recording discarded.');
   };
 

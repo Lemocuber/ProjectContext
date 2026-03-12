@@ -9,6 +9,8 @@ Date: 2026-03-11
 - Network failures during finalize can leave local-complete but cloud-pending sessions.
 - Realtime suggestion quality can vary with partial/unclean transcript context.
 - In-session suggestion requests can distract users if trigger UX is too frequent.
+- Remote diagnostics can accidentally exfiltrate transcript, prompt, or secret material if capture is too broad.
+- Source-map/release mismatch can make remote reports noisy but not actionable.
 
 ## Mitigations
 - Treat foreground service as required for recording keepalive on Android and surface explicit failure states when service drops.
@@ -18,11 +20,15 @@ Date: 2026-03-11
 - Preserve local completed session state even when cloud sync fails; retry on next sync trigger.
 - Enforce request cooldown + single in-flight policy for live suggestions.
 - Keep suggestion output concise and scoped to immediate next steps.
+- Route all provider calls through a local diagnostics adapter with shared scrubbing.
+- Keep diagnostics submission best effort and validate symbolication before relying on the tool operationally.
 
 ## Open Questions
 - Should `index.json` updates be append-only with periodic compaction, or full overwrite for prototype simplicity?
 - What is the default cloud retention policy for prototype artifacts (indefinite vs bounded)?
 - Do we expose a manual "sync now" control in History for prototype debugging/visibility?
+- Do manual reports include screenshot attachment later, or stay text-and-breadcrumbs only for V2?
+- Is provider-side sampling needed immediately, or can V2 start unsampled because usage volume is still low?
 
 ## Locked Decisions (2026-03-12)
 - Discarded recordings are never uploaded.
@@ -36,3 +42,5 @@ Date: 2026-03-11
 - V2 removes the built-in history entry count limit.
 - V2 uses strict alignment for transcript storage: metadata in history, transcript body only in markdown artifacts.
 - V2 does not include backward compatibility for pre-alignment persisted history entries.
+- Settings remains visible even when all config-managed inputs are hidden, because diagnostics/support actions live there.
+- V2 remote diagnostics must exclude transcript text, prompt context, credentials, signed URLs, and raw audio payloads.

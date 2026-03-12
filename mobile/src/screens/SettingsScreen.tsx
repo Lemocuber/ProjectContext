@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   Alert,
   Pressable,
+  Share,
   ScrollView,
   StyleSheet,
   Text,
@@ -16,6 +17,14 @@ import {
   loadEffectiveDeepSeekApiKey,
   loadEffectiveVocabularySettings,
 } from '../config/defaultSettingsConfig';
+import {
+  captureDiagnosticsException,
+  captureDiagnosticsMessage,
+  flushDiagnostics,
+  getDiagnosticsRelease,
+  getDiagnosticsSupportInfo,
+  isDiagnosticsEnabled,
+} from '../services/diagnostics/diagnostics';
 import { syncDashScopeVocabulary, deleteDashScopeVocabulary } from '../services/vocabulary/dashscopeVocabularyService';
 import { prepareVocabulary } from '../services/vocabulary/vocabularyUtils';
 import {
@@ -75,6 +84,9 @@ export function SettingsScreen() {
   const [cosSecretKey, setCosSecretKey] = useState('');
   const [cloudUserId, setCloudUserId] = useState('');
   const [savedCloudUserId, setSavedCloudUserId] = useState('');
+  const [diagnosticsBusy, setDiagnosticsBusy] = useState(false);
+  const [diagnosticsNote, setDiagnosticsNote] = useState('');
+  const [diagnosticsStatus, setDiagnosticsStatus] = useState('');
 
   useEffect(() => {
     let alive = true;
@@ -215,6 +227,11 @@ export function SettingsScreen() {
       Alert.alert('Saved', 'Vocabulary synced and will apply to new recordings.');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Vocabulary sync failed.';
+      captureDiagnosticsException(error, {
+        feature: 'vocabulary',
+        level: 'warning',
+        stage: 'settings_sync',
+      });
       setVocabularyError(message);
       setVocabularySyncStatus('failed');
       await saveVocabularySettings({
@@ -296,6 +313,59 @@ export function SettingsScreen() {
     setCloudUserId(saved);
     setSavedCloudUserId(saved);
     Alert.alert('Saved', 'Cloud user ID updated.');
+  };
+
+  const onSendDiagnosticsReport = async () => {
+    if (!isDiagnosticsEnabled()) {
+      setDiagnosticsStatus('Diagnostics are disabled. Configure a Sentry DSN first.');
+      Alert.alert('Diagnostics disabled', 'Set `internal.sentryDsn` or `EXPO_PUBLIC_SENTRY_DSN` first.');
+      return;
+    }
+
+    setDiagnosticsBusy(true);
+    setDiagnosticsStatus('');
+    try {
+      const note = diagnosticsNote.trim();
+      const eventId = captureDiagnosticsMessage('Manual diagnostics report submitted.', {
+        extras: {
+          diagnosticsNote: note || undefined,
+          release: getDiagnosticsRelease(),
+          supportInfo: getDiagnosticsSupportInfo(),
+        },
+        feature: 'manual_report',
+        level: 'info',
+        stage: 'settings',
+      });
+      await flushDiagnostics();
+      const status = eventId ? `Queued report ${eventId.slice(0, 8)}.` : 'Queued report.';
+      setDiagnosticsStatus(status);
+      setDiagnosticsNote('');
+      Alert.alert('Report sent', status);
+    } catch (error) {
+      captureDiagnosticsException(error, {
+        feature: 'manual_report',
+        level: 'warning',
+        stage: 'settings_send',
+      });
+      const message = error instanceof Error ? error.message : 'Diagnostics report failed.';
+      setDiagnosticsStatus(message);
+      Alert.alert('Report failed', message);
+    } finally {
+      setDiagnosticsBusy(false);
+    }
+  };
+
+  const onShareSupportInfo = async () => {
+    try {
+      await Share.share({ message: getDiagnosticsSupportInfo() });
+    } catch (error) {
+      captureDiagnosticsException(error, {
+        feature: 'manual_report',
+        level: 'warning',
+        stage: 'settings_share',
+      });
+      Alert.alert('Share failed', 'Unable to open the share sheet on this device.');
+    }
   };
 
   if (!hiddenSections) {
@@ -496,6 +566,42 @@ export function SettingsScreen() {
         </View>
       ) : null}
 
+      <View style={styles.card}>
+        <Text style={styles.title}>Diagnostics</Text>
+        <Text style={styles.description}>
+          Send a manual diagnostics event and share support info. Do not include transcript text,
+          prompts, or keys in the note.
+        </Text>
+
+        <TextInput
+          autoCapitalize="sentences"
+          autoCorrect
+          multiline
+          onChangeText={setDiagnosticsNote}
+          placeholder="Short note about what went wrong"
+          placeholderTextColor={colors.muted}
+          style={styles.textarea}
+          textAlignVertical="top"
+          value={diagnosticsNote}
+        />
+
+        <View style={styles.row}>
+          <Pressable disabled={diagnosticsBusy} onPress={onSendDiagnosticsReport} style={styles.primaryButton}>
+            <Text style={styles.primaryButtonText}>{diagnosticsBusy ? 'Sending...' : 'Send Report'}</Text>
+          </Pressable>
+          <Pressable onPress={onShareSupportInfo} style={styles.secondaryButton}>
+            <Text style={styles.secondaryButtonText}>Share Info</Text>
+          </Pressable>
+        </View>
+
+        <Text style={styles.savedLabel}>Release: {getDiagnosticsRelease()}</Text>
+        <Text style={styles.savedLabel}>Diagnostics: {isDiagnosticsEnabled() ? 'Enabled' : 'Disabled'}</Text>
+        {diagnosticsStatus ? <Text style={styles.savedLabel}>{diagnosticsStatus}</Text> : null}
+        <Text selectable style={styles.supportInfo}>
+          {getDiagnosticsSupportInfo()}
+        </Text>
+      </View>
+
       <View style={[styles.bottomSpacer, { height: viewportHeight * 0.5 }]} />
     </ScrollView>
   );
@@ -577,6 +683,12 @@ const styles = StyleSheet.create({
   savedLabel: {
     color: colors.muted,
     marginTop: 14,
+  },
+  supportInfo: {
+    color: colors.ink,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 12,
   },
   errorText: {
     color: '#9D1A1A',

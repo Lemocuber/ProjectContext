@@ -1,7 +1,7 @@
 # Milestone 3 Implementation Spec
 
 Date: 2026-03-13
-Status: implemented pending validation on 2026-03-13.
+Status: completed and validated on 2026-03-13.
 
 ## Goal
 Define and implement the in-session "What do you think" flow, while also fixing prompt-context shaping for title generation so both AI features use simple bounded transcript context rules.

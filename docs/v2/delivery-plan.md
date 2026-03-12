@@ -21,13 +21,22 @@ Date: 2026-03-11
 - Enforce discard rule: no remote writes when user discards session.
 
 ## Milestone 3: In-Session AI Suggestions
-- Status: current.
+- Status: completed and validated on 2026-03-13.
 - Add "What do you think" action during active recording.
 - Use rolling realtime transcript context window.
 - Add cooldown and in-flight guard.
 - Render suggestions inline without blocking capture.
 
-## Milestone 4: Integration and Validation
+## Milestone 4: Observability and Remote Diagnostics
+- Status: current.
+- Integrate remote error monitoring for release builds, with Sentry as the default target unless a concrete blocker appears during implementation.
+- Add sanitized instrumentation points across recording, realtime ASR, cloud sync, finalization, title generation, export, and live suggestion flows.
+- Add breadcrumb-style lifecycle events so failures can be reconstructed without transcript or key exfiltration.
+- Upload release/source-map metadata so reported stack traces are symbolicated and actionable.
+- Add a small always-visible Settings diagnostics section for manual report submission and support metadata access.
+- Remove whole-tab Settings hiding; keep section-level hiding for config-managed settings only.
+
+## Milestone 5: Integration and Validation
 - Validate end-to-end flows for:
   - lock screen recording continuity,
   - app background continuity,
@@ -35,7 +44,8 @@ Date: 2026-03-11
   - discard-no-upload behavior,
   - continue-finalize upload behavior,
   - cross-device history visibility,
-  - in-session suggestion reliability under active recording.
+  - in-session suggestion reliability under active recording,
+  - observability signal quality and privacy scrubbing.
 
 ## Acceptance Criteria (V2)
 - Recording continues through:
@@ -50,6 +60,9 @@ Date: 2026-03-11
 - History tab can load cloud-synced sessions from another device using same `userId`.
 - Offline launch still shows local cached history entries.
 - During recording, user can request "What do you think" and get concise suggestions from realtime context.
+- Release builds capture actionable remote diagnostics for crashes and key operational failures without sending transcript text, prompts, API keys, COS secrets, or raw audio.
+- Settings is always reachable, even when all other settings sections are config-managed.
+- Settings includes a small diagnostics/manual report surface.
 
 ## Validation Gates
 - Typecheck and CI pass.
@@ -62,4 +75,7 @@ Date: 2026-03-11
   - discard-no-upload verification,
   - finalize-upload verification,
   - cloud history pull/push verification,
-  - in-session suggestion cooldown/in-flight behavior.
+  - in-session suggestion cooldown/in-flight behavior,
+  - remote diagnostic event capture and source-map verification,
+  - privacy scrubbing verification for diagnostics payloads,
+  - manual report flow verification from Settings.

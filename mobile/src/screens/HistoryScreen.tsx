@@ -13,6 +13,7 @@ import {
   View,
 } from 'react-native';
 import { exportFileToDownloads, exportTextToDownloads } from '../services/export/downloadsExportService';
+import { captureDiagnosticsException } from '../services/diagnostics/diagnostics';
 import {
   ensureSessionAudioAvailable,
   ensureSessionTranscriptAvailable,
@@ -154,6 +155,11 @@ export function HistoryScreen({ refreshToken }: HistoryScreenProps) {
         syncPlayerFromStatus(status);
         return true;
       } catch (error) {
+        captureDiagnosticsException(error, {
+          feature: 'history_audio',
+          level: 'warning',
+          stage: 'load',
+        });
         if (loadSeqRef.current === seq) {
           setAudioError(error instanceof Error ? error.message : 'Failed to load saved audio.');
         }
@@ -215,6 +221,11 @@ export function HistoryScreen({ refreshToken }: HistoryScreenProps) {
         await sound.playAsync();
       }
     } catch (error) {
+      captureDiagnosticsException(error, {
+        feature: 'history_audio',
+        level: 'warning',
+        stage: 'playback_toggle',
+      });
       setAudioError(error instanceof Error ? error.message : 'Failed to play saved audio.');
     }
   }, [loadSoundForItem, selectedItem]);
@@ -262,6 +273,11 @@ export function HistoryScreen({ refreshToken }: HistoryScreenProps) {
       await refreshSelectedItem(item.id);
       showToast('Markdown exported.');
     } catch (error) {
+      captureDiagnosticsException(error, {
+        feature: 'export',
+        level: 'warning',
+        stage: 'manual_markdown',
+      });
       setExportError(error instanceof Error ? error.message : 'Markdown export failed.');
     } finally {
       setExportingMarkdown(false);
@@ -309,6 +325,11 @@ export function HistoryScreen({ refreshToken }: HistoryScreenProps) {
       await refreshSelectedItem(item.id);
       showToast('Audio exported.');
     } catch (error) {
+      captureDiagnosticsException(error, {
+        feature: 'export',
+        level: 'warning',
+        stage: 'manual_audio',
+      });
       setExportError(error instanceof Error ? error.message : 'Audio export failed.');
     } finally {
       setExportingAudio(false);
@@ -324,6 +345,11 @@ export function HistoryScreen({ refreshToken }: HistoryScreenProps) {
       const status = await sound.getStatusAsync();
       syncPlayerFromStatus(status);
     } catch (error) {
+      captureDiagnosticsException(error, {
+        feature: 'history_audio',
+        level: 'warning',
+        stage: 'stop',
+      });
       setAudioError(error instanceof Error ? error.message : 'Failed to stop saved audio.');
     }
   }, [syncPlayerFromStatus]);
@@ -349,6 +375,11 @@ export function HistoryScreen({ refreshToken }: HistoryScreenProps) {
       const status = await sound.getStatusAsync();
       syncPlayerFromStatus(status);
     } catch (error) {
+      captureDiagnosticsException(error, {
+        feature: 'history_audio',
+        level: 'warning',
+        stage: 'seek',
+      });
       setAudioError(error instanceof Error ? error.message : 'Failed to seek saved audio.');
     }
   }, [syncPlayerFromStatus]);
@@ -393,6 +424,11 @@ export function HistoryScreen({ refreshToken }: HistoryScreenProps) {
         setSelectedTranscript(content);
       } catch (error) {
         if (cancelled) return;
+        captureDiagnosticsException(error, {
+          feature: 'history_transcript',
+          level: 'warning',
+          stage: 'load',
+        });
         setSelectedTranscript('');
         setTranscriptError(error instanceof Error ? error.message : 'Failed to load transcript.');
       }

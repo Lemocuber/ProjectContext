@@ -39,6 +39,8 @@ type RawConfig = {
     signedUrlTtl?: unknown;
     finalPassTimeout?: unknown;
     cosCleanupEnabled?: unknown;
+    sentryDsn?: unknown;
+    sentryEnvironment?: unknown;
   };
 };
 
@@ -46,6 +48,8 @@ type InternalRuntimeSettings = {
   signedUrlTtlSec: number;
   finalPassTimeoutSec: number;
   cosCleanupEnabled: boolean;
+  sentryDsn?: string;
+  sentryEnvironment?: string;
 };
 
 type ParsedDefaults = {
@@ -129,6 +133,9 @@ function parseVocabulary(config: RawConfig): { terms: string[]; rawText: string 
 }
 
 function parseInternal(config: RawConfig): InternalRuntimeSettings {
+  const sentryDsn = asTrimmedString(config.internal?.sentryDsn);
+  const sentryEnvironment = asTrimmedString(config.internal?.sentryEnvironment);
+
   return {
     signedUrlTtlSec: toPositiveInt(config.internal?.signedUrlTtl, DEFAULT_INTERNAL.signedUrlTtlSec, 60),
     finalPassTimeoutSec: toPositiveInt(
@@ -140,6 +147,8 @@ function parseInternal(config: RawConfig): InternalRuntimeSettings {
       typeof config.internal?.cosCleanupEnabled === 'boolean'
         ? config.internal.cosCleanupEnabled
         : DEFAULT_INTERNAL.cosCleanupEnabled,
+    sentryDsn: sentryDsn || undefined,
+    sentryEnvironment: sentryEnvironment || undefined,
   };
 }
 
@@ -219,6 +228,26 @@ export async function loadEffectiveCloudUserId(): Promise<string> {
 export async function getInternalRuntimeSettings(): Promise<InternalRuntimeSettings> {
   const defaults = await loadRuntimeConfig();
   return defaults.internal;
+}
+
+export async function loadDiagnosticsRuntimeConfig(): Promise<{
+  dsn: string | null;
+  environment: string | null;
+}> {
+  const defaults = await loadRuntimeConfig();
+  const envDsn =
+    typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_SENTRY_DSN
+      ? process.env.EXPO_PUBLIC_SENTRY_DSN.trim()
+      : '';
+  const envName =
+    typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_SENTRY_ENVIRONMENT
+      ? process.env.EXPO_PUBLIC_SENTRY_ENVIRONMENT.trim()
+      : '';
+
+  return {
+    dsn: defaults.internal.sentryDsn || envDsn || null,
+    environment: defaults.internal.sentryEnvironment || envName || null,
+  };
 }
 
 export async function loadEffectiveDashScopeApiKey(): Promise<string | null> {

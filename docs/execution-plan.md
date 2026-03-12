@@ -4,8 +4,9 @@
 1. Finalize V2 specs for recording keepalive, cloud history/artifact sync, and in-session AI suggestions.
 2. Keepalive foundation completed and validated on 2026-03-12.
 3. Cloud sync model completed and validated on 2026-03-13.
-4. Implement in-session "What do you think" next (realtime transcript window + cooldown + UI integration).
-5. Run integrated manual validation on Android lock/background/tab-switch, cloud sync, and in-session suggestions.
+4. In-session "What do you think" completed and validated on 2026-03-13.
+5. Implement observability and remote diagnostics next, with privacy-safe instrumentation and a manual report surface in Settings.
+6. Run integrated manual validation on Android lock/background/tab-switch, cloud sync, in-session suggestions, and diagnostics.
 
 ## V2 Workstreams
 
@@ -36,6 +37,9 @@
 - Return short actionable moment-level guidance.
 
 ### Workstream D: Integration + Validation
+- Verify remote diagnostics capture crashes and key operational failures with useful symbolicated stack traces.
+- Verify privacy scrubbing removes transcript content, prompts, secrets, and raw audio references from remote events.
+- Verify Settings remains visible even when all config-managed sections are hidden, and that the diagnostics/reporting section remains available.
 - Verify keepalive behavior across lock/background/tab-switch.
 - Verify discard path produces no remote objects.
 - Verify continue-finalize path uploads artifacts and updates cloud history.

@@ -3,7 +3,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { RecordingProvider } from './src/recording/RecordingProvider';
-import { shouldHideSettingsTab } from './src/config/defaultSettingsConfig';
+import {
+  addDiagnosticsBreadcrumb,
+  captureDiagnosticsException,
+} from './src/services/diagnostics/diagnostics';
 import { syncHistoryWithCloud } from './src/services/history/cloudHistorySyncService';
 import { HistoryScreen } from './src/screens/HistoryScreen';
 import { RecordScreen } from './src/screens/RecordScreen';
@@ -15,46 +18,42 @@ type Tab = 'record' | 'history' | 'settings';
 export default function App() {
   const [tab, setTab] = useState<Tab>('record');
   const [historyRefreshToken, setHistoryRefreshToken] = useState(0);
-  const [settingsTabHidden, setSettingsTabHidden] = useState(false);
 
   useEffect(() => {
     let alive = true;
-    void (async () => {
-      const hidden = await shouldHideSettingsTab();
-      if (alive) setSettingsTabHidden(hidden);
-    })();
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let alive = true;
+    addDiagnosticsBreadcrumb({
+      category: 'app.lifecycle',
+      message: 'Startup history sync requested.',
+    });
     void syncHistoryWithCloud()
       .then(() => {
         if (alive) setHistoryRefreshToken((value) => value + 1);
+        addDiagnosticsBreadcrumb({
+          category: 'cloud.sync',
+          message: 'Startup history sync completed.',
+        });
       })
-      .catch(() => undefined);
+      .catch((error) => {
+        captureDiagnosticsException(error, {
+          feature: 'cloud_sync',
+          level: 'warning',
+          stage: 'startup',
+        });
+      })
     return () => {
       alive = false;
     };
   }, []);
-
-  useEffect(() => {
-    if (settingsTabHidden && tab === 'settings') {
-      setTab('record');
-    }
-  }, [settingsTabHidden, tab]);
 
   const handleHistoryUpdated = useCallback(() => {
     setHistoryRefreshToken((value) => value + 1);
   }, []);
 
   const body = useMemo(() => {
-    if (!settingsTabHidden && tab === 'settings') return <SettingsScreen />;
+    if (tab === 'settings') return <SettingsScreen />;
     if (tab === 'history') return <HistoryScreen refreshToken={historyRefreshToken} />;
     return <RecordScreen />;
-  }, [historyRefreshToken, settingsTabHidden, tab]);
+  }, [historyRefreshToken, tab]);
 
   return (
     <SafeAreaProvider>
@@ -77,16 +76,14 @@ export default function App() {
             >
               <Text style={[styles.tabLabel, tab === 'history' ? styles.tabLabelActive : null]}>History</Text>
             </Pressable>
-            {!settingsTabHidden ? (
-              <Pressable
-                onPress={() => setTab('settings')}
-                style={[styles.tabButton, tab === 'settings' ? styles.tabButtonActive : null]}
-              >
-                <Text style={[styles.tabLabel, tab === 'settings' ? styles.tabLabelActive : null]}>
-                  Settings
-                </Text>
-              </Pressable>
-            ) : null}
+            <Pressable
+              onPress={() => setTab('settings')}
+              style={[styles.tabButton, tab === 'settings' ? styles.tabButtonActive : null]}
+            >
+              <Text style={[styles.tabLabel, tab === 'settings' ? styles.tabLabelActive : null]}>
+                Settings
+              </Text>
+            </Pressable>
           </View>
 
           <RecordingProvider onHistoryUpdated={handleHistoryUpdated}>{body}</RecordingProvider>

@@ -43,9 +43,10 @@ Project Context starts as an Android-first voice capture tool with real-time tra
 - Add cloud-backed remote artifact storage (audio + transcript markdown + session metadata) with cross-device history sync.
 - Keep discard behavior local-only (no upload for discarded recordings).
 - Add in-session "What do you think" action during recording using realtime transcript context for immediate suggestions.
+- Add privacy-safe remote diagnostics and manual report support so field failures are debuggable.
 
 ### Phase 5: Product Hardening (Planned)
-- Better observability and diagnostics.
+- Deeper observability and diagnostics beyond the V2 baseline.
 - Improved offline/retry behavior.
 - Privacy controls and data governance.
 
@@ -53,5 +54,5 @@ Project Context starts as an Android-first voice capture tool with real-time tra
 - Phase 1: v0 accepted on-device with reliable realtime final transcripts and browseable local history.
 - Phase 2: users can mark key moments, complete post-record file ASR, and view speaker-attributed finalized transcripts with fallback when final pass fails.
 - Phase 3: users get fallback-to-LLM title behavior, finalized markdown transcripts, and reliable export flows.
-- Phase 4: users keep recording continuity under lock/background/tab-switch, get cloud-synced history across devices, and can request useful in-session AI suggestions.
+- Phase 4: users keep recording continuity under lock/background/tab-switch, get cloud-synced history across devices, can request useful in-session AI suggestions, and expose actionable remote diagnostics without leaking transcript, prompt, or credential material.
 - Phase 5: stable enough for wider pilot use.

@@ -8,6 +8,7 @@ Date: 2026-03-11
 - Cloud-backed session artifact model with per-user index + per-session metadata files.
 - History synchronization for cross-device session visibility.
 - In-session "What do you think" AI requests powered by realtime transcript context.
+- Privacy-safe remote diagnostics for crashes and key operational failures.
 
 ## Recording Lifecycle Refactor
 
@@ -24,6 +25,7 @@ Date: 2026-03-11
   - pending finalization event and local draft artifact URIs.
 - `RecordScreen` becomes a view/controller that subscribes to orchestrator state.
 - Tab changes no longer affect recording internals.
+- Settings tab remains mounted in navigation even when config-managed settings inputs are hidden, because diagnostics/reporting entry points live there.
 
 ## Android Keepalive Contract
 - When recording starts:
@@ -139,6 +141,75 @@ Date: 2026-03-11
 - Highlight behavior remains unchanged during recording in V2.
 - The recording timer should occupy the current recording-time highlight-count slot.
 
+## Remote Diagnostics
+
+## Provider Direction
+- Default target is Sentry for V2 unless integration constraints force a documented replacement.
+- Integration must support:
+  - uncaught JS/native crash capture,
+  - manual exception/message capture,
+  - release tagging and source-map upload,
+  - breadcrumb collection under explicit privacy controls.
+
+## Event Model
+- Capture classes:
+  - crashes,
+  - startup hydration failures,
+  - recording lifecycle failures,
+  - realtime ASR session failures,
+  - cloud sync failures,
+  - final-pass/title/live-suggestion failures,
+  - export/manual-report failures.
+- Event metadata should prefer short structured tags/extras over raw error blobs.
+- Recommended tags/extras:
+  - `feature`,
+  - `stage`,
+  - `status`,
+  - `appVersion`,
+  - `release`,
+  - `speakerMode`,
+  - `cloudSyncStatus`,
+  - non-secret device/runtime context already supplied by the provider SDK.
+
+## Privacy Rules
+- Remote diagnostics must not include:
+  - transcript text,
+  - prompt context,
+  - API keys,
+  - COS secrets,
+  - raw audio content,
+  - signed URLs,
+  - full local file paths when a stable redacted identifier is sufficient.
+- `cloudUserId` must not be sent raw; if correlation is needed, use a one-way derived identifier or omit it.
+- Breadcrumb/message scrubbing must run before provider submission, not only at call sites.
+
+## Manual Report UX
+- Settings always remains visible in app navigation.
+- Existing config-managed sections may still hide individually.
+- Add a small diagnostics section containing:
+  - app/release display,
+  - send diagnostic report action,
+  - support-info display/share access,
+  - optional short free-text note for manual reports.
+- Manual reports should create a provider event with:
+  - explicit user action origin,
+  - current app/release metadata,
+  - recent sanitized breadcrumbs,
+  - optional user note.
+
+## Instrumentation Boundaries
+- Centralize capture helpers behind a small app-local diagnostics service rather than calling the provider SDK ad hoc from every screen/service.
+- Initial instrumentation points:
+  - app startup cloud sync,
+  - recording start/stop/fail/discard/finalize transitions,
+  - keepalive service start/stop/listener events,
+  - DashScope realtime session open/reconnect/timeout/fail paths,
+  - COS upload/download/index read-write failures,
+  - title generation and live suggestion request failures,
+  - export failures,
+  - manual report trigger.
+- Breadcrumbs should summarize lifecycle events and outcomes, not dump payload bodies.
+
 ## Data Model Additions
 - `SessionHistoryItem` additions (proposed):
   - `ownerUserId: string`,
@@ -157,7 +228,9 @@ Date: 2026-03-11
   - session remains completed locally,
   - cloud sync can retry later.
 - Local and remote History models should stay intentionally aligned so sync does not need to translate pipeline-only state.
+- Observability failures must not block user-critical flows; diagnostics submission is best effort.
 
 ## Prototype Security Posture (Explicit)
 - Internal/personal tool posture allows simplified user identity setup.
 - Strict production controls (credential rotation/policy enforcement/audit pipelines) are not required for V2 prototype acceptance.
+- Even under prototype posture, remote diagnostics are treated as privacy-sensitive and must default to redaction-first behavior.
