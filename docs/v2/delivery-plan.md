@@ -28,7 +28,7 @@ Date: 2026-03-11
 - Render suggestions inline without blocking capture.
 
 ## Milestone 4: Observability and Remote Diagnostics
-- Status: current.
+- Status: completed and validated on 2026-03-13.
 - Integrate remote error monitoring at runtime, with Sentry as the default target unless a concrete blocker appears during implementation.
 - Add sanitized instrumentation points across recording, realtime ASR, cloud sync, finalization, title generation, export, and live suggestion flows.
 - Add breadcrumb-style lifecycle events so failures can be reconstructed without transcript or key exfiltration.
@@ -36,6 +36,7 @@ Date: 2026-03-11
 - Remove whole-tab Settings hiding; keep section-level hiding for config-managed settings only.
 
 ## Milestone 5: Integration and Validation
+- Status: completed and validated on 2026-03-13.
 - Validate end-to-end flows for:
   - lock screen recording continuity,
   - app background continuity,

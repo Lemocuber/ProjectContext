@@ -33,7 +33,7 @@ Date: 2026-03-11
   - show persistent notification (`Recording in progress`).
 - While foreground service is running:
   - keep microphone capture and realtime websocket session active under screen lock/background.
-- Notification actions (prototype minimum):
+- Notification actions (alpha minimum):
   - `Stop` action supported.
 - When recording fully completes/discards/fails:
   - stop foreground service,
@@ -55,7 +55,7 @@ Date: 2026-03-11
   - triggers finalization pipeline,
   - performs remote upload and metadata sync.
 
-## Cloud Storage Model (Prototype)
+## Cloud Storage Model (Alpha)
 
 ## Object Layout
 - `users/{userId}/index.json`
@@ -133,7 +133,7 @@ Date: 2026-03-11
 - Guidance prompt asks for short actionable suggestions for the immediate conversation moment.
 
 ## Output Contract
-- Concise actionable response (prototype target: 1-3 short bullets).
+- Concise actionable response (alpha target: 1-3 short bullets).
 - Displayed inline during recording without interrupting capture.
 - Suggestion records remain UI-only in V2 and are not part of History storage.
 
@@ -230,7 +230,7 @@ Date: 2026-03-11
 - Local and remote History models should stay intentionally aligned so sync does not need to translate pipeline-only state.
 - Observability failures must not block user-critical flows; diagnostics submission is best effort.
 
-## Prototype Security Posture (Explicit)
-- Internal/personal tool posture allows simplified user identity setup.
-- Strict production controls (credential rotation/policy enforcement/audit pipelines) are not required for V2 prototype acceptance.
-- Even under prototype posture, remote diagnostics are treated as privacy-sensitive and must default to redaction-first behavior.
+## Alpha Security Posture (Explicit)
+- Early alpha posture allows simplified user identity setup.
+- Strict production controls (credential rotation/policy enforcement/audit pipelines) are not required for V2 alpha acceptance.
+- Even under alpha posture, remote diagnostics are treated as privacy-sensitive and must default to redaction-first behavior.

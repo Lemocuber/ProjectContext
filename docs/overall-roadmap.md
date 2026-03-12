@@ -37,7 +37,7 @@ Project Context starts as an Android-first voice capture tool with real-time tra
 - Keep fallback title until LLM title generation completes.
 - If file ASR fails, keep a fallback transcript artifact sourced from stored raw realtime transcript.
 
-### Phase 4: V2 Resilience + Cloud Sync + Live AI Assist (Planned)
+### Phase 4: V2 Resilience + Cloud Sync + Live AI Assist (Completed 2026-03-13, Alpha 1.2.0)
 - Add recording keepalive on Android so active sessions survive screen lock, app backgrounding, and in-app tab changes.
 - Move recording/session lifecycle ownership from screen scope to persistent app-level service orchestration.
 - Add cloud-backed remote artifact storage (audio + transcript markdown + session metadata) with cross-device history sync.
@@ -45,7 +45,7 @@ Project Context starts as an Android-first voice capture tool with real-time tra
 - Add in-session "What do you think" action during recording using realtime transcript context for immediate suggestions.
 - Add privacy-safe remote diagnostics and manual report support so field failures are debuggable.
 
-### Phase 5: Product Hardening (Planned)
+### Phase 5: Product Hardening (Future)
 - Deeper observability and diagnostics beyond the V2 baseline.
 - Improved offline/retry behavior.
 - Privacy controls and data governance.

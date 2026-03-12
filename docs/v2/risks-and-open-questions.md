@@ -23,9 +23,9 @@ Date: 2026-03-11
 - Keep diagnostics submission best effort and validate event quality/privacy before relying on the tool operationally.
 
 ## Open Questions
-- Should `index.json` updates be append-only with periodic compaction, or full overwrite for prototype simplicity?
-- What is the default cloud retention policy for prototype artifacts (indefinite vs bounded)?
-- Do we expose a manual "sync now" control in History for prototype debugging/visibility?
+- Should `index.json` updates be append-only with periodic compaction, or full overwrite for alpha simplicity?
+- What is the default cloud retention policy for alpha artifacts (indefinite vs bounded)?
+- Do we expose a manual "sync now" control in History for alpha debugging/visibility?
 - Do manual reports include screenshot attachment later, or stay text-and-breadcrumbs only for V2?
 - Is provider-side sampling needed immediately, or can V2 start unsampled because usage volume is still low?
 
@@ -34,7 +34,7 @@ Date: 2026-03-11
 - Remote upload starts only after explicit continue-finalize action.
 - "What do you think" runs during recording using realtime transcript context.
 - Live suggestions remain UI-only in V2 and are not stored in History data.
-- Prototype/internal usage does not require production-grade security hardening in V2 acceptance.
+- Alpha-stage usage does not require production-grade security hardening in V2 acceptance.
 - V2 cloud identity is a random 10-character alphanumeric `userId` generated on first launch unless a valid bundled `cloudUserId` override is present; the Settings section is shown only when the value is not config-managed.
 - Remote History storage mirrors finalized user-visible History data, not intermediate finalize/runtime state.
 - Highlight tap lists and finalized sentence lists are not retained after markdown generation completes.

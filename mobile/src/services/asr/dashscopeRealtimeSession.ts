@@ -194,7 +194,7 @@ function saveRecordingWav(
 
 async function requestMicPermission(): Promise<void> {
   if (Platform.OS !== 'android') {
-    const error = new Error('Realtime recording is enabled for Android prototype only.');
+    const error = new Error('Realtime recording is enabled for Android only.');
     captureDiagnosticsException(error, {
       feature: 'asr_realtime',
       level: 'warning',

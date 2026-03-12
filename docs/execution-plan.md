@@ -5,8 +5,9 @@
 2. Keepalive foundation completed and validated on 2026-03-12.
 3. Cloud sync model completed and validated on 2026-03-13.
 4. In-session "What do you think" completed and validated on 2026-03-13.
-5. Implement observability and remote diagnostics next, with privacy-safe instrumentation and a manual report surface in Settings.
-6. Run integrated manual validation on Android lock/background/tab-switch, cloud sync, in-session suggestions, and diagnostics.
+5. Observability and remote diagnostics completed and validated on 2026-03-13, including remote capture and privacy scrubbing checks for a real ASR reconnect failure.
+6. Integrated manual validation completed on 2026-03-13 with 11/11 reported pass across Android continuity, cloud sync, AI suggestions, diagnostics/privacy gates, and Settings manual reporting.
+7. V2 is closed and promoted to alpha release `1.2.0` (build `2`).
 
 ## V2 Workstreams
 
@@ -53,6 +54,7 @@
 
 ## Archive Note
 - V1 execution plan and validation are completed and accepted as of 2026-03-06.
+- V2 execution plan and validation are completed and accepted as of 2026-03-13 for alpha release `1.2.0` (build `2`).
 - Detailed V1 implementation history remains in:
   - `docs/v1/delivery-plan.md`
   - `docs/v1/technical-specification.md`

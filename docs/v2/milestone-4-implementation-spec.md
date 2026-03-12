@@ -1,7 +1,7 @@
 # Milestone 4 Implementation Spec
 
 Date: 2026-03-13
-Status: current.
+Status: completed and validated on 2026-03-13.
 
 ## Goal
 Add privacy-safe remote diagnostics for V2 so crashes and high-value operational failures are debuggable in the field, while also making Settings a permanent support surface with a small manual report section.
@@ -76,3 +76,4 @@ Add privacy-safe remote diagnostics for V2 so crashes and high-value operational
 - Added a permanent Settings diagnostics section with manual report submission and support-info sharing.
 - Added sanitized service-level breadcrumbs and terminal failure capture for ASR, DeepSeek, and COS flows.
 - `mobile` typecheck passed after the provider-specific diagnostics pass.
+- On-device validation confirmed Sentry capture for a real realtime ASR reconnect exhaustion (`3/3 failed`) after a temporary network outage; the reported event appeared after connectivity recovery and did not expose transcript text, prompts, secrets, signed URLs, raw audio, or raw `cloudUserId`.

@@ -3,13 +3,13 @@
 Date: 2026-03-11
 
 ## Goal
-Evolve V1 into a resilient daily-use prototype by ensuring recording continuity, cloud-synced session history, live in-session AI guidance, and actionable remote diagnostics for field failures.
+Evolve V1 into a resilient daily-use alpha release by ensuring recording continuity, cloud-synced session history, live in-session AI guidance, and actionable remote diagnostics for field failures.
 
 ## Core Principles
 - Recording lifecycle is service-owned, not screen-owned.
 - Cloud history is the primary cross-device source; local cache remains usable offline.
 - "What do you think" is a live assist tool during recording, not a post-session summary flow.
-- Prototype/internal usage prioritizes speed of iteration over strict production-grade safety controls.
+- Alpha-stage usage prioritizes speed of iteration over strict production-grade safety controls.
 - Remote diagnostics must help debug failures without exporting transcript content, prompts, credentials, or audio payloads.
 
 ## In Scope
