@@ -39,6 +39,11 @@ Date: 2026-03-11
 
 ## Post-Record Decision Gate
 - `Stop` transitions session to local review state (no remote upload yet).
+- `Stop` uses the locally buffered transcript/audio snapshot and must not wait for DashScope `finish-task` acknowledgement before entering review.
+- Any post-stop DashScope websocket shutdown or `task-finished` acknowledgement is background cleanup only.
+- No late realtime transcript refinement is applied after stop.
+- Realtime transcript exists for live UI and fallback-only usage.
+- Finalize source of truth is the recorded audio artifact uploaded for file ASR/final-pass processing.
 - `Discard` path:
   - requires existing two-tap confirm,
   - deletes local draft audio/transcript artifacts,

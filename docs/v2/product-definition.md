@@ -40,8 +40,11 @@ Evolve V1 into a resilient daily-use prototype by ensuring recording continuity,
 - Returning to app restores current recording state and transcript progress.
 - Switching to History/Settings does not stop or reset active recording.
 - Post-stop review state remains explicit:
+  - stop feedback is immediate after local capture stops,
   - discard (two-tap confirm),
   - continue finalize.
+- DashScope realtime session shutdown must not block the post-stop review transition.
+- Post-stop finalize uses the recorded audio artifact upload path; realtime transcript is only for live UX and fallback behavior.
 - Discard path performs no remote upload.
 - History screen reflects cloud-synced sessions and remains readable with locally cached data offline.
 - During recording, user can request "What do you think" and receive concise live suggestions.
