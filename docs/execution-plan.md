@@ -37,7 +37,7 @@
 - Return short actionable moment-level guidance.
 
 ### Workstream D: Integration + Validation
-- Verify remote diagnostics capture crashes and key operational failures with useful symbolicated stack traces.
+- Verify remote diagnostics capture crashes and key operational failures with useful sanitized context.
 - Verify privacy scrubbing removes transcript content, prompts, secrets, and raw audio references from remote events.
 - Verify Settings remains visible even when all config-managed sections are hidden, and that the diagnostics/reporting section remains available.
 - Verify keepalive behavior across lock/background/tab-switch.

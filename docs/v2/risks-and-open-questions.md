@@ -10,7 +10,6 @@ Date: 2026-03-11
 - Realtime suggestion quality can vary with partial/unclean transcript context.
 - In-session suggestion requests can distract users if trigger UX is too frequent.
 - Remote diagnostics can accidentally exfiltrate transcript, prompt, or secret material if capture is too broad.
-- Source-map/release mismatch can make remote reports noisy but not actionable.
 
 ## Mitigations
 - Treat foreground service as required for recording keepalive on Android and surface explicit failure states when service drops.
@@ -21,7 +20,7 @@ Date: 2026-03-11
 - Enforce request cooldown + single in-flight policy for live suggestions.
 - Keep suggestion output concise and scoped to immediate next steps.
 - Route all provider calls through a local diagnostics adapter with shared scrubbing.
-- Keep diagnostics submission best effort and validate symbolication before relying on the tool operationally.
+- Keep diagnostics submission best effort and validate event quality/privacy before relying on the tool operationally.
 
 ## Open Questions
 - Should `index.json` updates be append-only with periodic compaction, or full overwrite for prototype simplicity?

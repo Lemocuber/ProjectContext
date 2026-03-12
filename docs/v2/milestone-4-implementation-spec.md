@@ -44,9 +44,9 @@ Add privacy-safe remote diagnostics for V2 so crashes and high-value operational
 - Rich in-app diagnostics viewer.
 
 ## Provider and Build Rules
-- Release builds must include release/environment metadata that matches uploaded source maps.
-- The initial target is Sentry because it provides React Native crash capture, breadcrumbs, and release/source-map tooling that fit the current app shape.
-- If Sentry setup proves incompatible with the current Expo/prebuild workflow, document the blocker before switching providers.
+- Runtime diagnostics should initialize from local config/env only; build-time upload tooling is out of scope for this milestone.
+- The initial target is Sentry because it provides React Native crash capture and breadcrumbs that fit the current app shape.
+- If Sentry setup proves incompatible with the current app runtime workflow, document the blocker before switching providers.
 
 ## Manual Report Contract
 - User enters an optional short note.
@@ -63,10 +63,9 @@ Add privacy-safe remote diagnostics for V2 so crashes and high-value operational
 2. Remove whole-tab Settings hiding and keep section-level hiding only.
 3. Add Settings diagnostics/manual report section.
 4. Instrument the agreed high-value service boundaries with sanitized breadcrumbs and captures.
-5. Configure release/source-map handling for actionable reports.
 
 ## Validation Targets
-- Unhandled crashes appear remotely with symbolicated stack traces.
+- Unhandled crashes appear remotely with actionable error context.
 - Startup sync, recording, ASR, cloud sync, finalize, suggestion, and export failures can be reported with actionable metadata.
 - Diagnostics payloads contain no transcript text, prompt context, secrets, signed URLs, or raw audio.
 - Settings stays visible even when all other settings inputs are config-managed.

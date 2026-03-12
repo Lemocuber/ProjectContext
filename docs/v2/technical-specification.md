@@ -148,7 +148,6 @@ Date: 2026-03-11
 - Integration must support:
   - uncaught JS/native crash capture,
   - manual exception/message capture,
-  - release tagging and source-map upload,
   - breadcrumb collection under explicit privacy controls.
 
 ## Event Model

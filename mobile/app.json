@@ -25,17 +25,7 @@
       },
       "predictiveBackGestureEnabled": false
     },
-    "plugins": [
-      "./plugins/withProjectContextConfigAsset",
-      "./plugins/withRecordingKeepalive",
-      [
-        "@sentry/react-native/expo",
-        {
-          "organization": "lemocuber",
-          "project": "react-native"
-        }
-      ]
-    ],
+    "plugins": ["./plugins/withProjectContextConfigAsset", "./plugins/withRecordingKeepalive"],
     "web": {
       "favicon": "./assets/favicon.png"
     }
