@@ -1,6 +1,6 @@
 # V2 Spec Pack
 
-Status: in progress. Milestone 1 completed on 2026-03-12; Milestone 2 spec drafted.
+Status: in progress. Milestone 1 completed on 2026-03-12; Milestone 2 completed on 2026-03-13; Milestone 3 is current.
 
 ## Scope Pillars
 - Recording keepalive across screen lock, app backgrounding, and in-app tab switches.

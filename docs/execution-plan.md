@@ -2,11 +2,10 @@
 
 ## Current Sprint Focus (V2 Kickoff)
 1. Finalize V2 specs for recording keepalive, cloud history/artifact sync, and in-session AI suggestions.
-2. Implement keepalive foundation first (service ownership + Android foreground notification).
-3. Implement cloud sync model second (index/session metadata/artifact upload + history pull).
-3. Implement cloud sync model second (index metadata + artifact upload + history pull).
-4. Implement in-session "What do you think" third (realtime transcript window + cooldown + UI integration).
-5. Run integrated manual validation on Android lock/background/tab-switch and cross-device history sync.
+2. Keepalive foundation completed and validated on 2026-03-12.
+3. Cloud sync model completed and validated on 2026-03-13.
+4. Implement in-session "What do you think" next (realtime transcript window + cooldown + UI integration).
+5. Run integrated manual validation on Android lock/background/tab-switch, cloud sync, and in-session suggestions.
 
 ## V2 Workstreams
 

@@ -1,6 +1,7 @@
 # Milestone 2 Implementation Spec
 
 Date: 2026-03-12
+Status: completed and validated on 2026-03-13.
 
 ## Goal
 Define and implement the cloud session storage contract that V2 history sync depends on, then wire the first end-to-end push/pull flows around that contract.

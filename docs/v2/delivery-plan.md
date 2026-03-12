@@ -10,7 +10,7 @@ Date: 2026-03-11
 - Ensure restore/reattach behavior when app returns to foreground.
 
 ## Milestone 2: Cloud Session Model and Sync
-- Status: current.
+- Status: completed and validated on 2026-03-13.
 - Define remote object layout (`index.json`, `recordings/{sessionId}.wav`, `transcripts/{sessionId}.md`).
 - Generate a local 10-character cloud `userId` on first launch and expose it in Settings for cross-device pairing.
 - Support bundled `cloudUserId` override in config asset and hide the Cloud User ID settings section when preset.
@@ -21,6 +21,7 @@ Date: 2026-03-11
 - Enforce discard rule: no remote writes when user discards session.
 
 ## Milestone 3: In-Session AI Suggestions
+- Status: current.
 - Add "What do you think" action during active recording.
 - Use rolling realtime transcript context window.
 - Add cooldown and in-flight guard.
