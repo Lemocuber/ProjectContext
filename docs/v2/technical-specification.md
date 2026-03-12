@@ -117,14 +117,22 @@ Date: 2026-03-11
 - Single in-flight request at a time.
 
 ## Prompt Context
-- Rolling realtime transcript window (target last 60-120 seconds, bounded by character limit).
-- Optional recent highlights near the same window.
+- Shared transcript truncation helper used by both title generation and live suggestions.
+- Prompt budgets are bounded by estimated token count rather than character count.
+- Live suggestion context uses the last 400 estimated tokens of transcript context.
+- Title generation uses the first 200 estimated tokens plus the last 300 estimated tokens of transcript context.
+- If the title ranges would overlap, the transcript context should be deduplicated rather than repeating the middle.
+- Highlights do not affect live suggestion or title prompt shaping in V2.
 - Guidance prompt asks for short actionable suggestions for the immediate conversation moment.
 
 ## Output Contract
 - Concise actionable response (prototype target: 1-3 short bullets).
 - Displayed inline during recording without interrupting capture.
 - Suggestion records remain UI-only in V2 and are not part of History storage.
+
+## Live Highlight UI Rule
+- Highlight behavior remains unchanged during recording in V2.
+- The recording timer should occupy the current recording-time highlight-count slot.
 
 ## Data Model Additions
 - `SessionHistoryItem` additions (proposed):

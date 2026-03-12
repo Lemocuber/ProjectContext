@@ -1,3 +1,5 @@
+import { buildTitlePromptContext } from '../ai/promptContext';
+
 const DEEPSEEK_CHAT_URL = 'https://api.deepseek.com/chat/completions';
 
 type DeepSeekChatResponse = {
@@ -15,17 +17,11 @@ function normalizeTitle(value: string): string {
 export async function generateSessionTitle(params: {
   apiKey: string;
   transcript: string;
-  highlights?: string[];
 }): Promise<string> {
-  const transcript = params.transcript.trim();
+  const transcript = buildTitlePromptContext(params.transcript);
   if (!transcript) {
     throw new Error('Cannot generate title from empty transcript.');
   }
-
-  const highlightsBlock =
-    params.highlights && params.highlights.length
-      ? `\nHighlights:\n${params.highlights.map((entry) => `- ${entry}`).join('\n')}`
-      : '';
 
   const response = await fetch(DEEPSEEK_CHAT_URL, {
     method: 'POST',
@@ -45,7 +41,7 @@ export async function generateSessionTitle(params: {
         },
         {
           role: 'user',
-          content: `Transcript:\n${transcript}${highlightsBlock}`,
+          content: `Transcript:\n${transcript}`,
         },
       ],
     }),

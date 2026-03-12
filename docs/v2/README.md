@@ -14,3 +14,4 @@ Status: in progress. Milestone 1 completed on 2026-03-12; Milestone 2 completed 
 - [Risks and Open Questions](./risks-and-open-questions.md)
 - [Milestone 1 Implementation Spec](./milestone-1-implementation-spec.md)
 - [Milestone 2 Implementation Spec](./milestone-2-implementation-spec.md)
+- [Milestone 3 Implementation Spec](./milestone-3-implementation-spec.md)

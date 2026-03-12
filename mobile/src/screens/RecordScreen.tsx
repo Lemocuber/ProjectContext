@@ -30,6 +30,18 @@ const FINAL_PASS_SPEAKER_MODE_OPTIONS: FinalPassSpeakerModeOption[] = [
   { value: 'three', badge: '3', icon: 'groups' },
 ];
 
+function formatClock(value: number): string {
+  const totalSeconds = Math.max(0, Math.floor(value / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  }
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
 export function RecordScreen() {
   const {
     canEditSpeakerMode,
@@ -39,16 +51,20 @@ export function RecordScreen() {
     errorText,
     finalPassSpeakerMode,
     hasPendingReview,
-    highlightCount,
     infoText,
     isBusy,
     isRecording,
+    isRequestingSuggestion,
     isStopping,
     markHighlight,
+    recordingElapsedMs,
+    requestSuggestion,
     setFinalPassSpeakerMode,
     start,
     status,
     stop,
+    suggestionItems,
+    suggestionStatusText,
     transcriptText,
   } = useRecording();
   const transcriptScrollRef = useRef<ScrollView | null>(null);
@@ -174,9 +190,24 @@ export function RecordScreen() {
           </Pressable>
         </View>
       ) : isRecording ? (
-        <Pressable onPress={markHighlight} style={styles.highlightButton}>
-          <Text style={styles.highlightButtonText}>Mark Highlight</Text>
-        </Pressable>
+        <View style={styles.recordingActionsRow}>
+          <Pressable onPress={markHighlight} style={[styles.actionButton, styles.highlightButton]}>
+            <Text style={styles.highlightButtonText}>Mark Highlight</Text>
+          </Pressable>
+          <Pressable
+            disabled={isStopping || isRequestingSuggestion}
+            onPress={requestSuggestion}
+            style={[
+              styles.actionButton,
+              styles.suggestionButton,
+              isStopping || isRequestingSuggestion ? styles.actionButtonDisabled : null,
+            ]}
+          >
+            <Text style={styles.suggestionButtonText}>
+              {isRequestingSuggestion ? 'Thinking...' : 'What do you think'}
+            </Text>
+          </Pressable>
+        </View>
       ) : (
         <View style={styles.speakerModeSelectWrap}>
           {FINAL_PASS_SPEAKER_MODE_OPTIONS.map((entry) => {
@@ -200,10 +231,21 @@ export function RecordScreen() {
           })}
         </View>
       )}
-      <Text style={styles.highlightCountText}>Highlights: {highlightCount}</Text>
+      <Text style={styles.recordingTimerText}>Timer: {formatClock(recordingElapsedMs)}</Text>
 
       {errorText ? <Text style={styles.errorText}>{errorText}</Text> : null}
       {infoText ? <Text style={styles.infoText}>{infoText}</Text> : null}
+      {suggestionStatusText || suggestionItems.length ? (
+        <View style={styles.suggestionPanel}>
+          <Text style={styles.suggestionTitle}>What do you think</Text>
+          {suggestionStatusText ? <Text style={styles.suggestionStatusText}>{suggestionStatusText}</Text> : null}
+          {suggestionItems.map((item, index) => (
+            <Text key={`${index}-${item}`} style={styles.suggestionItemText}>
+              • {item}
+            </Text>
+          ))}
+        </View>
+      ) : null}
 
       <ScrollView
         contentContainerStyle={styles.transcriptWrap}
@@ -262,15 +304,35 @@ const styles = StyleSheet.create({
   recordButtonDisabled: {
     backgroundColor: '#CCB6AE',
   },
-  highlightButton: {
-    alignItems: 'center',
+  recordingActionsRow: {
     alignSelf: 'center',
-    backgroundColor: colors.ink,
+    flexDirection: 'row',
+    gap: 10,
+    width: 242,
+  },
+  actionButton: {
+    alignItems: 'center',
     borderRadius: 10,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
+    height: 42,
+    justifyContent: 'center',
+  },
+  actionButtonDisabled: {
+    opacity: 0.75,
+  },
+  highlightButton: {
+    backgroundColor: colors.ink,
+    flex: 0.95,
   },
   highlightButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  suggestionButton: {
+    backgroundColor: colors.accent,
+    flex: 1.3,
+  },
+  suggestionButtonText: {
     color: '#fff',
     fontSize: 14,
     fontWeight: '700',
@@ -338,7 +400,7 @@ const styles = StyleSheet.create({
     height: 42,
     justifyContent: 'center',
   },
-  highlightCountText: {
+  recordingTimerText: {
     color: colors.muted,
     fontSize: 12,
     fontWeight: '700',
@@ -353,6 +415,29 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 13,
     fontWeight: '600',
+  },
+  suggestionPanel: {
+    backgroundColor: '#F2ECE2',
+    borderColor: colors.border,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 6,
+    padding: 12,
+  },
+  suggestionTitle: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  suggestionStatusText: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  suggestionItemText: {
+    color: colors.ink,
+    fontSize: 14,
+    lineHeight: 20,
   },
   transcriptPanel: {
     backgroundColor: colors.panel,

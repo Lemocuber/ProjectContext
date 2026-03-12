@@ -2,8 +2,8 @@ import { File } from 'expo-file-system';
 import {
   createContext,
   type ReactNode,
-  useEffect,
   useContext,
+  useEffect,
   useRef,
   useState,
 } from 'react';
@@ -16,6 +16,7 @@ import {
   loadEffectiveDeepSeekApiKey,
   loadEffectiveVocabularySettings,
 } from '../config/defaultSettingsConfig';
+import { generateLiveSuggestions } from '../services/ai/deepseekLiveSuggestionService';
 import {
   runDashScopeRecordedFinalPass,
   type FinalPassSpeakerMode,
@@ -25,11 +26,7 @@ import type { AsrEvent, AsrSession } from '../services/asr/types';
 import { cleanupCosObjectBestEffort, stageAudioToCos } from '../services/cos/cosStagingService';
 import { exportTextToDownloads } from '../services/export/downloadsExportService';
 import { uploadSessionToCloud } from '../services/history/cloudHistorySyncService';
-import {
-  anchorHighlightTaps,
-  buildFallbackTitle,
-  collectHighlightTexts,
-} from '../services/session/sessionFormatting';
+import { anchorHighlightTaps, buildFallbackTitle } from '../services/session/sessionFormatting';
 import { generateSessionTitle } from '../services/title/deepseekTitleService';
 import {
   buildMarkdownFileName,
@@ -54,17 +51,21 @@ type RecordingContextValue = {
   errorText: string;
   finalPassSpeakerMode: FinalPassSpeakerMode;
   hasPendingReview: boolean;
-  highlightCount: number;
   infoText: string;
   isBusy: boolean;
   isRecording: boolean;
+  isRequestingSuggestion: boolean;
   isStopping: boolean;
+  recordingElapsedMs: number;
   setFinalPassSpeakerMode: (mode: FinalPassSpeakerMode) => void;
   start: () => Promise<void>;
   status: RecordingOrchestratorStatus;
   stop: () => Promise<void>;
+  suggestionItems: string[];
+  suggestionStatusText: string;
   transcriptText: string;
   markHighlight: () => void;
+  requestSuggestion: () => Promise<void>;
   continueFinalize: () => Promise<void>;
   discardRecording: () => Promise<void>;
 };
@@ -75,6 +76,7 @@ type RecordingProviderProps = {
 };
 
 const DEFAULT_FINAL_PASS_SPEAKER_MODE: FinalPassSpeakerMode = 'auto';
+const LIVE_SUGGESTION_COOLDOWN_MS = 30_000;
 
 const RecordingContext = createContext<RecordingContextValue | null>(null);
 
@@ -88,12 +90,15 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
   const [transcriptText, setTranscriptText] = useState('');
   const [errorText, setErrorText] = useState('');
   const [infoText, setInfoText] = useState('');
-  const [highlightCount, setHighlightCount] = useState(0);
+  const [isRequestingSuggestion, setIsRequestingSuggestion] = useState(false);
+  const [recordingElapsedMs, setRecordingElapsedMs] = useState(0);
   const [discardConfirmArmed, setDiscardConfirmArmed] = useState(false);
   const [finalPassSpeakerMode, setFinalPassSpeakerMode] = useState<FinalPassSpeakerMode>(
     DEFAULT_FINAL_PASS_SPEAKER_MODE,
   );
   const [isStopping, setIsStopping] = useState(false);
+  const [suggestionItems, setSuggestionItems] = useState<string[]>([]);
+  const [suggestionStatusText, setSuggestionStatusText] = useState('');
   const sessionRef = useRef<AsrSession | null>(null);
   const pendingFinalizeEventRef = useRef<Extract<AsrEvent, { type: 'final' }> | null>(null);
   const transcriptRef = useRef('');
@@ -106,6 +111,8 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
   const finalPassSpeakerModeRef = useRef<FinalPassSpeakerMode>(DEFAULT_FINAL_PASS_SPEAKER_MODE);
   const appliedVocabularyIdRef = useRef<string | undefined>(undefined);
   const appliedVocabularyTermsRef = useRef<string[]>([]);
+  const lastSuggestionAtRef = useRef(0);
+  const suggestionRequestIdRef = useRef(0);
 
   const isRecording = status === 'recording';
   const hasPendingReview = status === 'review' && !!pendingFinalizeEventRef.current;
@@ -124,10 +131,13 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
     setStatus('idle');
     setTranscriptText('');
     transcriptRef.current = '';
-    setHighlightCount(0);
+    setIsRequestingSuggestion(false);
+    setRecordingElapsedMs(0);
     setErrorText('');
     setInfoText(nextInfoText);
     setIsStopping(false);
+    setSuggestionItems([]);
+    setSuggestionStatusText('');
     startAtRef.current = null;
     startAtMsRef.current = 0;
     sessionIdRef.current = '';
@@ -136,6 +146,8 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
     highlightTapsMsRef.current = [];
     appliedVocabularyIdRef.current = undefined;
     appliedVocabularyTermsRef.current = [];
+    lastSuggestionAtRef.current = 0;
+    suggestionRequestIdRef.current = 0;
     resetSpeakerMode();
   };
 
@@ -157,6 +169,19 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
     },
     [],
   );
+
+  useEffect(() => {
+    if (status !== 'recording' || !startAtMsRef.current) return;
+
+    setRecordingElapsedMs(Math.max(0, Date.now() - startAtMsRef.current));
+    const timer = setInterval(() => {
+      setRecordingElapsedMs(Math.max(0, Date.now() - startAtMsRef.current));
+    }, 1000);
+
+    return () => {
+      clearInterval(timer);
+    };
+  }, [status]);
 
   const persistSession = async (item: SessionHistoryItem) => {
     if (persistedRef.current || !sessionIdRef.current) return;
@@ -277,7 +302,6 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
           (await generateSessionTitle({
           apiKey: deepSeekApiKey,
           transcript: bestTranscriptText,
-          highlights: collectHighlightTexts(finalizedSentences),
         })) || fallbackTitle;
       } catch {
         finalTitle = fallbackTitle;
@@ -347,9 +371,12 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
     transcriptRef.current = '';
     setErrorText('');
     setInfoText('');
-    setHighlightCount(0);
+    setIsRequestingSuggestion(false);
+    setRecordingElapsedMs(0);
     setDiscardConfirmArmed(false);
     setIsStopping(false);
+    setSuggestionItems([]);
+    setSuggestionStatusText('');
     pendingFinalizeEventRef.current = null;
     startAtRef.current = new Date().toISOString();
     startAtMsRef.current = Date.now();
@@ -360,6 +387,8 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
     finalPassSpeakerModeRef.current = finalPassSpeakerMode;
     appliedVocabularyIdRef.current = undefined;
     appliedVocabularyTermsRef.current = [];
+    lastSuggestionAtRef.current = 0;
+    suggestionRequestIdRef.current = 0;
 
     const vocabularySettings = await loadEffectiveVocabularySettings();
     const vocabularyId = vocabularySettings.syncStatus === 'failed' ? undefined : vocabularySettings.vocabularyId;
@@ -384,6 +413,10 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
             void stopRecordingKeepaliveNotification();
             transcriptRef.current = event.text;
             setTranscriptText(event.text);
+            setRecordingElapsedMs(Math.max(0, Date.now() - startAtMsRef.current));
+            setIsRequestingSuggestion(false);
+            setSuggestionItems([]);
+            setSuggestionStatusText('');
             pendingFinalizeEventRef.current = event;
             setDiscardConfirmArmed(false);
             setIsStopping(false);
@@ -397,6 +430,9 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
           }
           void stopRecordingKeepaliveNotification();
           pendingFinalizeEventRef.current = null;
+          setIsRequestingSuggestion(false);
+          setSuggestionItems([]);
+          setSuggestionStatusText('');
           setErrorText(event.message);
           setStatus('failed');
           setInfoText('');
@@ -442,7 +478,51 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
   const markHighlight = () => {
     if (!startAtMsRef.current || status !== 'recording') return;
     highlightTapsMsRef.current = [...highlightTapsMsRef.current, Math.max(0, Date.now() - startAtMsRef.current)];
-    setHighlightCount(highlightTapsMsRef.current.length);
+  };
+
+  const requestSuggestion = async () => {
+    if (status !== 'recording' || isStopping || isRequestingSuggestion) return;
+
+    const deepSeekApiKey = (await loadEffectiveDeepSeekApiKey())?.trim() || '';
+    if (!deepSeekApiKey) {
+      setSuggestionStatusText('Set your DeepSeek API key in Settings before asking for suggestions.');
+      return;
+    }
+
+    const transcript = transcriptRef.current.trim();
+    if (!transcript) {
+      setSuggestionStatusText('Speak a bit more before asking for suggestions.');
+      return;
+    }
+
+    const remainingMs = LIVE_SUGGESTION_COOLDOWN_MS - (Date.now() - lastSuggestionAtRef.current);
+    if (lastSuggestionAtRef.current && remainingMs > 0) {
+      setSuggestionStatusText(`Wait ${Math.ceil(remainingMs / 1000)}s before asking again.`);
+      return;
+    }
+
+    const requestId = suggestionRequestIdRef.current + 1;
+    suggestionRequestIdRef.current = requestId;
+    setIsRequestingSuggestion(true);
+    setSuggestionStatusText('Thinking...');
+    try {
+      const suggestions = await generateLiveSuggestions({
+        apiKey: deepSeekApiKey,
+        transcript,
+      });
+      if (suggestionRequestIdRef.current !== requestId) return;
+      lastSuggestionAtRef.current = Date.now();
+      setSuggestionItems(suggestions);
+      setSuggestionStatusText('');
+    } catch (error) {
+      if (suggestionRequestIdRef.current !== requestId) return;
+      const message = error instanceof Error ? error.message : 'Failed to generate suggestions.';
+      setSuggestionStatusText(message);
+    } finally {
+      if (suggestionRequestIdRef.current === requestId) {
+        setIsRequestingSuggestion(false);
+      }
+    }
   };
 
   const continueFinalize = async () => {
@@ -498,17 +578,21 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
     errorText,
     finalPassSpeakerMode,
     hasPendingReview,
-    highlightCount,
     infoText,
     isBusy,
     isRecording,
+    isRequestingSuggestion,
     isStopping,
+    recordingElapsedMs,
     setFinalPassSpeakerMode,
     start,
     status,
     stop,
+    suggestionItems,
+    suggestionStatusText,
     transcriptText,
     markHighlight,
+    requestSuggestion,
     continueFinalize,
     discardRecording,
   };
