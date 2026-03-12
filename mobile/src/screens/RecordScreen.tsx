@@ -1,6 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Modal,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Pressable,
@@ -67,6 +68,8 @@ export function RecordScreen() {
     suggestionStatusText,
     transcriptText,
   } = useRecording();
+  const [isSuggestionModalVisible, setIsSuggestionModalVisible] = useState(false);
+  const [suggestionPresentationNonce, setSuggestionPresentationNonce] = useState(0);
   const transcriptScrollRef = useRef<ScrollView | null>(null);
   const autoScrollEnabledRef = useRef(true);
   const lastUserScrollAtRef = useRef(0);
@@ -139,6 +142,22 @@ export function RecordScreen() {
     [],
   );
 
+  const suggestionModalStatusText = suggestionStatusText === 'Thinking...' ? '' : suggestionStatusText;
+
+  const handleSuggestionPress = async () => {
+    setIsSuggestionModalVisible(false);
+    await requestSuggestion();
+    setSuggestionPresentationNonce((value) => value + 1);
+  };
+
+  useEffect(() => {
+    if (suggestionItems.length || suggestionModalStatusText) {
+      setIsSuggestionModalVisible(true);
+      return;
+    }
+    setIsSuggestionModalVisible(false);
+  }, [suggestionItems, suggestionModalStatusText, suggestionPresentationNonce]);
+
   const statusLabel = useMemo(() => {
     if (status === 'review') return 'Review Needed';
     if (isStopping) return 'Stopping';
@@ -197,17 +216,15 @@ export function RecordScreen() {
           </Pressable>
           <Pressable
             disabled={isStopping || isRequestingSuggestion}
-            onPress={requestSuggestion}
+            onPress={() => void handleSuggestionPress()}
             style={[
               styles.actionButton,
               styles.suggestionButton,
-              isStopping || isRequestingSuggestion ? styles.actionButtonDisabled : null,
+              isStopping || isRequestingSuggestion ? styles.suggestionButtonDisabled : null,
             ]}
           >
             <MaterialIcons color="#fff" name="emoji-objects" size={18} />
-            <Text style={styles.suggestionButtonText}>
-              {isRequestingSuggestion ? 'Thinking...' : 'Insights'}
-            </Text>
+            <Text style={styles.suggestionButtonText}>Insights</Text>
           </Pressable>
         </View>
       ) : (
@@ -237,17 +254,41 @@ export function RecordScreen() {
 
       {errorText ? <Text style={styles.errorText}>{errorText}</Text> : null}
       {infoText ? <Text style={styles.infoText}>{infoText}</Text> : null}
-      {suggestionStatusText || suggestionItems.length ? (
-        <View style={styles.suggestionPanel}>
-          <Text style={styles.suggestionTitle}>Insights</Text>
-          {suggestionStatusText ? <Text style={styles.suggestionStatusText}>{suggestionStatusText}</Text> : null}
-          {suggestionItems.map((item, index) => (
-            <Text key={`${index}-${item}`} style={styles.suggestionItemText}>
-              • {item}
-            </Text>
-          ))}
+
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setIsSuggestionModalVisible(false)}
+        transparent
+        visible={isSuggestionModalVisible}
+      >
+        <View style={styles.suggestionModalBackdrop}>
+          <Pressable
+            onPress={() => setIsSuggestionModalVisible(false)}
+            style={styles.suggestionModalDismissArea}
+          />
+          <View style={styles.suggestionModalCard}>
+            <View style={styles.suggestionModalHeader}>
+              <Text style={styles.suggestionTitle}>Insights</Text>
+              <Pressable
+                onPress={() => setIsSuggestionModalVisible(false)}
+                style={styles.suggestionCloseButton}
+              >
+                <Text style={styles.suggestionCloseButtonText}>Close</Text>
+              </Pressable>
+            </View>
+            <ScrollView contentContainerStyle={styles.suggestionModalBody}>
+              {suggestionModalStatusText ? (
+                <Text style={styles.suggestionStatusText}>{suggestionModalStatusText}</Text>
+              ) : null}
+              {suggestionItems.map((item, index) => (
+                <Text key={`${index}-${item}`} style={styles.suggestionItemText}>
+                  • {item}
+                </Text>
+              ))}
+            </ScrollView>
+          </View>
         </View>
-      ) : null}
+      </Modal>
 
       <ScrollView
         contentContainerStyle={styles.transcriptWrap}
@@ -321,9 +362,6 @@ const styles = StyleSheet.create({
     height: 42,
     justifyContent: 'center',
   },
-  actionButtonDisabled: {
-    opacity: 0.75,
-  },
   highlightButton: {
     backgroundColor: colors.ink,
   },
@@ -334,6 +372,9 @@ const styles = StyleSheet.create({
   },
   suggestionButton: {
     backgroundColor: colors.accent,
+  },
+  suggestionButtonDisabled: {
+    backgroundColor: '#CCB6AE',
   },
   suggestionButtonText: {
     color: '#fff',
@@ -419,13 +460,49 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
-  suggestionPanel: {
-    backgroundColor: '#F2ECE2',
+  suggestionModalBackdrop: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    flex: 1,
+    justifyContent: 'center',
+    padding: 18,
+  },
+  suggestionModalDismissArea: {
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  suggestionModalCard: {
+    backgroundColor: colors.panel,
     borderColor: colors.border,
-    borderRadius: 14,
+    borderRadius: 18,
     borderWidth: 1,
-    gap: 6,
-    padding: 12,
+    gap: 12,
+    maxHeight: '70%',
+    padding: 16,
+    width: '100%',
+  },
+  suggestionModalHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  suggestionModalBody: {
+    gap: 8,
+  },
+  suggestionCloseButton: {
+    borderColor: colors.border,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  suggestionCloseButtonText: {
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: '700',
   },
   suggestionTitle: {
     color: colors.ink,

@@ -117,6 +117,7 @@ Define and implement the in-session "What do you think" flow, while also fixing 
 - 2026-03-13: replaced the failed bundled-tokenizer approach with a lightweight weighted estimator for transcript truncation on mobile.
 - 2026-03-13: title generation switched from full-transcript input to bounded beginning-plus-ending context.
 - 2026-03-13: added live DeepSeek suggestion requests during recording with cooldown and single in-flight guards.
+- 2026-03-13: refined the live suggestion UI so completed suggestion output and validation/error text render in a dismissible popup rather than an inline block; while a request is running, the trigger keeps the `Insights` label and shows a disabled fill state instead of a loading label.
 - 2026-03-13: replaced the recording-time highlight counter UI with a timer while leaving highlight behavior otherwise unchanged.
 - 2026-03-13: mobile typecheck passed after the Milestone 3 implementation pass.
 
