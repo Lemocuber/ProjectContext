@@ -1,6 +1,7 @@
 import * as Sentry from '@sentry/react-native';
 import type { ComponentType } from 'react';
 import { Platform } from 'react-native';
+import { loadDiagnosticsRuntimeConfig } from '../../config/defaultSettingsConfig';
 
 type DiagnosticsLevel = 'fatal' | 'error' | 'warning' | 'log' | 'info' | 'debug';
 
@@ -26,26 +27,18 @@ const SENSITIVE_KEY_PATTERN =
   /(api.?key|authorization|secret|token|credential|password|transcript|prompt|audio|file(uri|path)?|markdown|clouduserid|signed|signature|sourceaudioremoteurl|remote(audio|markdown)key|url)$/i;
 const SENSITIVE_BREADCRUMB_CATEGORY_PATTERN = /^(console|fetch|xhr|http)$/i;
 const appConfig = require('../../../app.json');
-const bundledConfig = require('../../../assets/ProjectContext.config.json');
 const appSlug = appConfig.expo?.slug || 'project-context-mobile';
 const appVersion = appConfig.expo?.version || '0.0.0';
 const packageName =
   appConfig.expo?.android?.package || appConfig.expo?.ios?.bundleIdentifier || appSlug;
 const release = `${appSlug}@${appVersion}`;
-const configuredDsn =
-  (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_SENTRY_DSN
-    ? process.env.EXPO_PUBLIC_SENTRY_DSN
-    : bundledConfig.internal?.sentryDsn || ''
-  ).trim();
-const configuredEnvironment =
-  (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_SENTRY_ENVIRONMENT
-    ? process.env.EXPO_PUBLIC_SENTRY_ENVIRONMENT
-    : bundledConfig.internal?.sentryEnvironment || ''
-  ).trim();
+const DEFAULT_ENVIRONMENT = __DEV__ ? 'development' : 'production';
 
-let diagnosticsEnabled = !!configuredDsn;
-let diagnosticsEnvironment = configuredEnvironment || (__DEV__ ? 'development' : 'production');
+let configuredDsn: string | null = null;
+let diagnosticsEnabled = false;
+let diagnosticsEnvironment = DEFAULT_ENVIRONMENT;
 let initialized = false;
+let initPromise: Promise<void> | null = null;
 
 function sanitizeString(value: string): string {
   let next = value.replace(/sk-[A-Za-z0-9_-]+/g, REDACTED);
@@ -143,32 +136,65 @@ export function wrapRootComponent<P extends Record<string, unknown>>(
   return Sentry.wrap(RootComponent);
 }
 
-export function initDiagnostics(): void {
-  if (initialized || !configuredDsn) return;
-  initialized = true;
-
-  Sentry.init({
-    attachStacktrace: true,
-    beforeBreadcrumb: sanitizeBreadcrumb,
-    beforeSend: sanitizeEvent,
-    debug: __DEV__,
-    dsn: configuredDsn,
-    enabled: true,
-    environment: diagnosticsEnvironment,
-    maxBreadcrumbs: 50,
-    release,
-    sendDefaultPii: false,
-  });
-
-  Sentry.setTags({
-    appSlug,
-    appVersion,
-    packageName,
-    platform: Platform.OS,
-  });
+async function refreshDiagnosticsConfig(): Promise<void> {
+  const runtimeConfig = await loadDiagnosticsRuntimeConfig();
+  configuredDsn = runtimeConfig.dsn?.trim() || null;
+  diagnosticsEnabled = !!configuredDsn;
+  diagnosticsEnvironment = runtimeConfig.environment?.trim() || DEFAULT_ENVIRONMENT;
 }
 
-export function isDiagnosticsEnabled(): boolean {
+function buildSupportInfo(): string {
+  return [
+    `App: ${appSlug}`,
+    `Version: ${appVersion}`,
+    `Release: ${release}`,
+    `Environment: ${diagnosticsEnvironment}`,
+    `Package: ${packageName}`,
+    `Platform: ${Platform.OS}`,
+    `Diagnostics: ${diagnosticsEnabled ? 'enabled' : 'disabled'}`,
+  ].join('\n');
+}
+
+export async function initDiagnostics(): Promise<void> {
+  if (initialized) return;
+  if (initPromise) return initPromise;
+
+  initPromise = (async () => {
+    await refreshDiagnosticsConfig();
+    if (!configuredDsn) return;
+
+    Sentry.init({
+      attachStacktrace: true,
+      beforeBreadcrumb: sanitizeBreadcrumb,
+      beforeSend: sanitizeEvent,
+      debug: __DEV__,
+      dsn: configuredDsn,
+      enabled: true,
+      environment: diagnosticsEnvironment,
+      maxBreadcrumbs: 50,
+      release,
+      sendDefaultPii: false,
+    });
+
+    Sentry.setTags({
+      appSlug,
+      appVersion,
+      packageName,
+      platform: Platform.OS,
+    });
+
+    initialized = true;
+  })();
+
+  try {
+    await initPromise;
+  } finally {
+    if (!initialized) initPromise = null;
+  }
+}
+
+export async function isDiagnosticsEnabled(): Promise<boolean> {
+  await refreshDiagnosticsConfig();
   return diagnosticsEnabled;
 }
 
@@ -227,16 +253,9 @@ export async function flushDiagnostics(timeoutMs = 2000): Promise<boolean> {
   return false;
 }
 
-export function getDiagnosticsSupportInfo(): string {
-  return [
-    `App: ${appSlug}`,
-    `Version: ${appVersion}`,
-    `Release: ${release}`,
-    `Environment: ${diagnosticsEnvironment}`,
-    `Package: ${packageName}`,
-    `Platform: ${Platform.OS}`,
-    `Diagnostics: ${diagnosticsEnabled ? 'enabled' : 'disabled'}`,
-  ].join('\n');
+export async function getDiagnosticsSupportInfo(): Promise<string> {
+  await refreshDiagnosticsConfig();
+  return buildSupportInfo();
 }
 
 export function getDiagnosticsRelease(): string {

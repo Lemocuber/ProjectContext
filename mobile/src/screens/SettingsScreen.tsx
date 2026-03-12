@@ -23,6 +23,7 @@ import {
   flushDiagnostics,
   getDiagnosticsRelease,
   getDiagnosticsSupportInfo,
+  initDiagnostics,
   isDiagnosticsEnabled,
 } from '../services/diagnostics/diagnostics';
 import { syncDashScopeVocabulary, deleteDashScopeVocabulary } from '../services/vocabulary/dashscopeVocabularyService';
@@ -87,6 +88,8 @@ export function SettingsScreen() {
   const [diagnosticsBusy, setDiagnosticsBusy] = useState(false);
   const [diagnosticsNote, setDiagnosticsNote] = useState('');
   const [diagnosticsStatus, setDiagnosticsStatus] = useState('');
+  const [diagnosticsEnabled, setDiagnosticsEnabled] = useState(false);
+  const [supportInfo, setSupportInfo] = useState('');
 
   useEffect(() => {
     let alive = true;
@@ -139,6 +142,15 @@ export function SettingsScreen() {
         setCloudUserId(nextCloudUserId);
         setSavedCloudUserId(nextCloudUserId);
       }
+
+      await initDiagnostics();
+      const [enabled, info] = await Promise.all([
+        isDiagnosticsEnabled(),
+        getDiagnosticsSupportInfo(),
+      ]);
+      if (!alive) return;
+      setDiagnosticsEnabled(enabled);
+      setSupportInfo(info);
     })();
     return () => {
       alive = false;
@@ -316,7 +328,12 @@ export function SettingsScreen() {
   };
 
   const onSendDiagnosticsReport = async () => {
-    if (!isDiagnosticsEnabled()) {
+    await initDiagnostics();
+    const enabled = await isDiagnosticsEnabled();
+    const currentSupportInfo = await getDiagnosticsSupportInfo();
+    setDiagnosticsEnabled(enabled);
+    setSupportInfo(currentSupportInfo);
+    if (!enabled) {
       setDiagnosticsStatus('Diagnostics are disabled. Configure a Sentry DSN first.');
       Alert.alert('Diagnostics disabled', 'Set `internal.sentryDsn` or `EXPO_PUBLIC_SENTRY_DSN` first.');
       return;
@@ -330,7 +347,7 @@ export function SettingsScreen() {
         extras: {
           diagnosticsNote: note || undefined,
           release: getDiagnosticsRelease(),
-          supportInfo: getDiagnosticsSupportInfo(),
+          supportInfo: currentSupportInfo,
         },
         feature: 'manual_report',
         level: 'info',
@@ -357,7 +374,9 @@ export function SettingsScreen() {
 
   const onShareSupportInfo = async () => {
     try {
-      await Share.share({ message: getDiagnosticsSupportInfo() });
+      const currentSupportInfo = await getDiagnosticsSupportInfo();
+      setSupportInfo(currentSupportInfo);
+      await Share.share({ message: currentSupportInfo });
     } catch (error) {
       captureDiagnosticsException(error, {
         feature: 'manual_report',
@@ -595,10 +614,10 @@ export function SettingsScreen() {
         </View>
 
         <Text style={styles.savedLabel}>Release: {getDiagnosticsRelease()}</Text>
-        <Text style={styles.savedLabel}>Diagnostics: {isDiagnosticsEnabled() ? 'Enabled' : 'Disabled'}</Text>
+        <Text style={styles.savedLabel}>Diagnostics: {diagnosticsEnabled ? 'Enabled' : 'Disabled'}</Text>
         {diagnosticsStatus ? <Text style={styles.savedLabel}>{diagnosticsStatus}</Text> : null}
         <Text selectable style={styles.supportInfo}>
-          {getDiagnosticsSupportInfo()}
+          {supportInfo}
         </Text>
       </View>
 

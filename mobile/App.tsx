@@ -6,6 +6,7 @@ import { RecordingProvider } from './src/recording/RecordingProvider';
 import {
   addDiagnosticsBreadcrumb,
   captureDiagnosticsException,
+  initDiagnostics,
 } from './src/services/diagnostics/diagnostics';
 import { syncHistoryWithCloud } from './src/services/history/cloudHistorySyncService';
 import { HistoryScreen } from './src/screens/HistoryScreen';
@@ -21,25 +22,27 @@ export default function App() {
 
   useEffect(() => {
     let alive = true;
-    addDiagnosticsBreadcrumb({
-      category: 'app.lifecycle',
-      message: 'Startup history sync requested.',
-    });
-    void syncHistoryWithCloud()
-      .then(() => {
+    void (async () => {
+      await initDiagnostics();
+      addDiagnosticsBreadcrumb({
+        category: 'app.lifecycle',
+        message: 'Startup history sync requested.',
+      });
+      try {
+        await syncHistoryWithCloud();
         if (alive) setHistoryRefreshToken((value) => value + 1);
         addDiagnosticsBreadcrumb({
           category: 'cloud.sync',
           message: 'Startup history sync completed.',
         });
-      })
-      .catch((error) => {
+      } catch (error) {
         captureDiagnosticsException(error, {
           feature: 'cloud_sync',
           level: 'warning',
           stage: 'startup',
         });
-      })
+      }
+    })();
     return () => {
       alive = false;
     };
