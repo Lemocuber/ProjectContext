@@ -21,6 +21,7 @@ import {
   addDiagnosticsBreadcrumb,
   captureDiagnosticsException,
 } from '../services/diagnostics/diagnostics';
+import { ensureAndroidRuntimePermission } from '../services/permissions/androidRuntimePermissions';
 import {
   runDashScopeRecordedFinalPass,
   type FinalPassSpeakerMode,
@@ -439,6 +440,7 @@ export function RecordingProvider({ children, onHistoryUpdated }: RecordingProvi
         category: 'recording.lifecycle',
         message: 'Recording start requested.',
       });
+      await ensureAndroidRuntimePermission('microphone');
       await startRecordingKeepaliveNotification();
       sessionRef.current = await dashscopeRealtimeSessionService.start({
         apiKey,

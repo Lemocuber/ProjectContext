@@ -14,6 +14,7 @@ Status: completed and accepted on 2026-03-13 as alpha release `1.2.0` (build `2`
 - [Delivery Plan](./delivery-plan.md)
 - [Validation Matrix](./validation-matrix.md)
 - [Risks and Open Questions](./risks-and-open-questions.md)
+- [Implementation Notes](./implementation-notes.md)
 - [Milestone 1 Implementation Spec](./milestone-1-implementation-spec.md)
 - [Milestone 2 Implementation Spec](./milestone-2-implementation-spec.md)
 - [Milestone 3 Implementation Spec](./milestone-3-implementation-spec.md)

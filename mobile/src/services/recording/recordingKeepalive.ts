@@ -1,4 +1,5 @@
-import { NativeEventEmitter, NativeModules, PermissionsAndroid, Platform } from 'react-native';
+import { NativeEventEmitter, NativeModules, Platform } from 'react-native';
+import { ensureAndroidRuntimePermission } from '../permissions/androidRuntimePermissions';
 
 const STOP_REQUESTED_EVENT = 'recordingKeepaliveStopRequested';
 
@@ -17,15 +18,8 @@ const nativeModule =
 const nativeEmitter = nativeModule ? new NativeEventEmitter(nativeModule) : null;
 
 async function ensureNotificationPermission() {
-  if (Platform.OS !== 'android' || Platform.Version < 33) return;
-
-  const permission = PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS;
-  if (!permission) return;
-
-  const granted = await PermissionsAndroid.request(permission);
-  if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-    throw new Error('Notification permission is required for keepalive recording.');
-  }
+  if (Platform.OS !== 'android') return;
+  await ensureAndroidRuntimePermission('notifications');
 }
 
 function ensureNativeModule(): RecordingKeepaliveNativeModule {

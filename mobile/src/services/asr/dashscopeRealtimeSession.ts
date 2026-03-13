@@ -1,12 +1,13 @@
 import { Buffer } from 'buffer';
 import LiveAudioStream from 'react-native-live-audio-stream';
-import { PermissionsAndroid, Platform } from 'react-native';
+import { Platform } from 'react-native';
 import type { FinalizedSentence } from '../../types/session';
 import { saveSessionAudioBase64 } from '../audio/sessionAudio';
 import {
   addDiagnosticsBreadcrumb,
   captureDiagnosticsException,
 } from '../diagnostics/diagnostics';
+import { ensureAndroidRuntimePermission } from '../permissions/androidRuntimePermissions';
 import type { AsrSession, AsrSessionService } from './types';
 
 const DASHSCOPE_WS_URL = 'wss://dashscope.aliyuncs.com/api-ws/v1/inference/';
@@ -203,18 +204,16 @@ async function requestMicPermission(): Promise<void> {
     throw error;
   }
 
-  const granted = await PermissionsAndroid.request(
-    PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-  );
-
-  if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-    const error = new Error('Microphone permission denied.');
-    captureDiagnosticsException(error, {
+  try {
+    await ensureAndroidRuntimePermission('microphone');
+  } catch {
+    const permissionError = new Error('Microphone permission denied.');
+    captureDiagnosticsException(permissionError, {
       feature: 'asr_realtime',
       level: 'warning',
       stage: 'permission_denied',
     });
-    throw error;
+    throw permissionError;
   }
 }
 

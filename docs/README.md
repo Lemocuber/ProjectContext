@@ -8,6 +8,7 @@ This directory tracks product definition, technical specs, implementation notes,
 - [V0 Spec Pack](./v0/README.md)
 - [V1 Spec Pack](./v1/README.md)
 - [V2 Spec Pack](./v2/README.md)
+- [V2 Implementation Notes](./v2/implementation-notes.md)
 - [V1 Changelog](./v1/changelog.md)
 - [Overall Roadmap](./overall-roadmap.md)
 - [Execution Plan](./execution-plan.md)
@@ -25,3 +26,4 @@ This directory tracks product definition, technical specs, implementation notes,
 - V2 Milestone 4 (observability and remote diagnostics) completed and validated on 2026-03-13, including Sentry capture for a real ASR reconnect failure with no sensitive payload leakage observed.
 - V2 Milestone 5 (integration and validation) completed on 2026-03-13 with an 11/11 manual validation pass across keepalive, cloud sync, in-session suggestions, diagnostics capture/privacy, and Settings manual reporting.
 - V2 is completed and accepted on 2026-03-13 and promoted to alpha release `1.2.0` (build `2`).
+- Post-alpha patch line `1.2.1` is reserved for Android permission-gate stabilization around recording startup.
